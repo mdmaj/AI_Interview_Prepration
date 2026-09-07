@@ -22,3 +22,15 @@ export type CompanyBrief = z.infer<typeof companyBriefSchema>;
 
 export type ExtractedRole = z.infer<typeof extractedRoleSchema>;
 export type ExtractedRequirement = z.infer<typeof requirementSchema>;
+
+export const interviewResearchSchema = z.object({
+  process: z.array(z.string()),
+  common_topics: z.array(z.string()),
+  reported_questions: z.array(z.string()),
+  sources: z.array(z.string()),
+  gaps: z.array(z.string()),
+});
+
+export type InterviewResearch = z.infer<
+  typeof interviewResearchSchema
+>;
