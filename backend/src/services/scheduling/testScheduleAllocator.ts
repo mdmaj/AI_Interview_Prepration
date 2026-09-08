@@ -10,9 +10,9 @@ import {
 } from "./scheduleValidator.js";
 
 /*
- * -----------------------------------------
+ * ============================================================
  * Test Data
- * -----------------------------------------
+ * ============================================================
  */
 
 const requirements: ScheduleRequirement[] = [
@@ -68,21 +68,21 @@ const questions: ScheduleQuestion[] = [
 ];
 
 /*
- * -----------------------------------------
+ * ============================================================
  * Helper: Validate Schedule
- * -----------------------------------------
+ * ============================================================
  */
-
 
 const assertScheduleValid = (
   name: string,
   schedule: ScheduleResult,
+  expectedDays: number,
 ): void => {
   const validation = validateSchedule({
     days: schedule.days,
     questions,
     requirements,
-    daysAvailable: schedule.days.length,
+    daysAvailable: expectedDays,
   });
 
   if (!validation.is_valid) {
@@ -102,11 +102,10 @@ const assertScheduleValid = (
   );
 };
 
-
 /*
- * -----------------------------------------
+ * ============================================================
  * Helper: Run Schedule Test
- * -----------------------------------------
+ * ============================================================
  */
 
 const runTest = (
@@ -126,19 +125,28 @@ const runTest = (
     JSON.stringify(result, null, 2),
   );
 
+  /*
+   * IMPORTANT:
+   * Pass the actual requested number of days.
+   *
+   * This ensures that if we request 30 days,
+   * validator checks for exactly 30 days.
+   */
+
   assertScheduleValid(
     name,
     result,
+    days,
   );
 
   return result;
 };
 
 /*
- * -----------------------------------------
+ * ============================================================
  * Test 1
  * 1 Day
- * -----------------------------------------
+ * ============================================================
  */
 
 runTest(
@@ -147,10 +155,10 @@ runTest(
 );
 
 /*
- * -----------------------------------------
+ * ============================================================
  * Test 2
  * 3 Days
- * -----------------------------------------
+ * ============================================================
  */
 
 runTest(
@@ -159,10 +167,10 @@ runTest(
 );
 
 /*
- * -----------------------------------------
+ * ============================================================
  * Test 3
  * 5 Days
- * -----------------------------------------
+ * ============================================================
  */
 
 runTest(
@@ -171,10 +179,10 @@ runTest(
 );
 
 /*
- * -----------------------------------------
+ * ============================================================
  * Test 4
  * 30 Days
- * -----------------------------------------
+ * ============================================================
  */
 
 runTest(
@@ -183,10 +191,10 @@ runTest(
 );
 
 /*
- * -----------------------------------------
+ * ============================================================
  * Test 5
  * 60 Days
- * -----------------------------------------
+ * ============================================================
  */
 
 runTest(
@@ -195,10 +203,10 @@ runTest(
 );
 
 /*
- * -----------------------------------------
+ * ============================================================
  * Test 6
  * Deterministic Schedule
- * -----------------------------------------
+ * ============================================================
  */
 
 const firstRun = allocateSchedule(
@@ -227,10 +235,10 @@ console.log(
 );
 
 /*
- * -----------------------------------------
+ * ============================================================
  * Test 7
  * Invalid: 0 Days
- * -----------------------------------------
+ * ============================================================
  */
 
 let zeroDaysPassed = false;
@@ -262,10 +270,10 @@ if (!zeroDaysPassed) {
 }
 
 /*
- * -----------------------------------------
+ * ============================================================
  * Test 8
  * Invalid: 61 Days
- * -----------------------------------------
+ * ============================================================
  */
 
 let sixtyOneDaysPassed = false;
@@ -297,10 +305,10 @@ if (!sixtyOneDaysPassed) {
 }
 
 /*
- * -----------------------------------------
+ * ============================================================
  * Test 9
- * Must-have requirement coverage
- * -----------------------------------------
+ * Must-have Requirement Coverage
+ * ============================================================
  */
 
 const coverageSchedule = allocateSchedule(
@@ -309,6 +317,10 @@ const coverageSchedule = allocateSchedule(
   questions,
 );
 
+/*
+ * Get all MUST-HAVE requirement IDs.
+ */
+
 const mustHaveRequirementIds =
   requirements
     .filter(
@@ -316,13 +328,25 @@ const mustHaveRequirementIds =
         requirement.priority === "must",
     )
     .map(
-      (requirement) => requirement.id,
+      (requirement) =>
+        requirement.id,
     );
+
+/*
+ * Get all questions scheduled
+ * across all days.
+ */
 
 const scheduledQuestionIds =
   coverageSchedule.days.flatMap(
-    (day) => day.question_ids,
+    (day) =>
+      day.question_ids,
   );
+
+/*
+ * Find the actual questions
+ * that were scheduled.
+ */
 
 const scheduledQuestions =
   questions.filter(
@@ -332,6 +356,11 @@ const scheduledQuestions =
       ),
   );
 
+/*
+ * Collect requirements covered
+ * by scheduled questions.
+ */
+
 const scheduledRequirementIds =
   new Set(
     scheduledQuestions.flatMap(
@@ -339,6 +368,11 @@ const scheduledRequirementIds =
         question.requirement_ids,
     ),
   );
+
+/*
+ * Ensure every MUST-HAVE requirement
+ * is represented in the schedule.
+ */
 
 for (
   const requirementId of
@@ -360,11 +394,156 @@ console.log(
 );
 
 /*
- * -----------------------------------------
+ * ============================================================
+ * Test 10
+ * Exact Number of Days
+ * ============================================================
+ *
+ * Explicitly verify that the allocator
+ * returns exactly the requested number
+ * of days.
+ * ============================================================
+ */
+
+const requestedDays = 7;
+
+const exactDaysSchedule =
+  allocateSchedule(
+    requestedDays,
+    requirements,
+    questions,
+  );
+
+if (
+  exactDaysSchedule.days.length !==
+  requestedDays
+) {
+  throw new Error(
+    `❌ Test 10 failed: expected ${requestedDays} days but received ${exactDaysSchedule.days.length}.`,
+  );
+}
+
+console.log(
+  "\n✅ Test 10 - Exact number of days passed",
+);
+
+/*
+ * ============================================================
+ * Test 11
+ * Day Numbers Are Sequential
+ * ============================================================
+ */
+
+for (
+  let index = 0;
+  index <
+  exactDaysSchedule.days.length;
+  index++
+) {
+  const expectedDay =
+    index + 1;
+
+  if (
+    exactDaysSchedule.days[index]
+      .day !== expectedDay
+  ) {
+    throw new Error(
+      `❌ Test 11 failed: expected day ${expectedDay}.`,
+    );
+  }
+}
+
+console.log(
+  "\n✅ Test 11 - Sequential day numbers passed",
+);
+
+/*
+ * ============================================================
+ * Test 12
+ * Valid Question IDs
+ * ============================================================
+ */
+
+const validQuestionIds =
+  new Set(
+    questions.map(
+      (question) =>
+        question.id,
+    ),
+  );
+
+for (
+  const day of
+  exactDaysSchedule.days
+) {
+  for (
+    const questionId of
+    day.question_ids
+  ) {
+    if (
+      !validQuestionIds.has(
+        questionId,
+      )
+    ) {
+      throw new Error(
+        `❌ Test 12 failed: unknown question ID ${questionId}.`,
+      );
+    }
+  }
+}
+
+console.log(
+  "\n✅ Test 12 - Valid question IDs passed",
+);
+
+/*
+ * ============================================================
+ * Test 13
+ * Integer Minutes
+ * ============================================================
+ */
+
+for (
+  const day of
+  exactDaysSchedule.days
+) {
+  if (
+    !Number.isInteger(
+      day.minutes,
+    )
+  ) {
+    throw new Error(
+      `❌ Test 13 failed: day ${day.day} has non-integer minutes.`,
+    );
+  }
+
+  if (
+    day.minutes < 0
+  ) {
+    throw new Error(
+      `❌ Test 13 failed: day ${day.day} has negative minutes.`,
+    );
+  }
+}
+
+console.log(
+  "\n✅ Test 13 - Integer minutes passed",
+);
+
+/*
+ * ============================================================
  * Final Result
- * -----------------------------------------
+ * ============================================================
  */
 
 console.log(
-  "\n🎉 All schedule allocator tests passed successfully!",
+  "\n==========================================",
+);
+
+console.log(
+  "🎉 All schedule allocator tests passed successfully!",
+);
+
+console.log(
+  "==========================================",
 );

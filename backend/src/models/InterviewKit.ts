@@ -38,6 +38,7 @@ export interface IInterviewKit extends Document {
     company_url: string;
     role: string;
     location: string;
+    jd: string;
     jd_chars: number;
     researched_at: string;
     pages_used: string[];
@@ -69,6 +70,13 @@ export interface IInterviewKit extends Document {
     uncovered_requirement_ids: string[];
     passes: number;
   };
+
+  generation: {
+    status: "pending" | "generating" | "completed" | "failed";
+    progress: number;
+    current_step: string;
+    error: string | null;
+  };
 }
 
 const requirementSchema = new Schema<Requirement>(
@@ -78,7 +86,7 @@ const requirementSchema = new Schema<Requirement>(
     kind: { type: String, required: true },
     priority: { type: String, required: true },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const questionSchema = new Schema<Question>(
@@ -90,7 +98,7 @@ const questionSchema = new Schema<Question>(
     answer_outline: { type: String, required: true },
     difficulty: { type: Number, required: true },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const flashcardSchema = new Schema<Flashcard>(
@@ -100,7 +108,7 @@ const flashcardSchema = new Schema<Flashcard>(
     back: { type: String, required: true },
     requirement_ids: { type: [String], default: [] },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const scheduleDaySchema = new Schema<ScheduleDay>(
@@ -110,7 +118,7 @@ const scheduleDaySchema = new Schema<ScheduleDay>(
     question_ids: { type: [String], default: [] },
     minutes: { type: Number, required: true },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const interviewKitSchema = new Schema<IInterviewKit>(
@@ -127,6 +135,7 @@ const interviewKitSchema = new Schema<IInterviewKit>(
       company_url: { type: String, required: true },
       role: { type: String, required: true },
       location: { type: String, default: "" },
+      jd: { type: String, required: true },
       jd_chars: { type: Number, required: true },
       researched_at: { type: String, default: "" },
       pages_used: { type: [String], default: [] },
@@ -176,15 +185,36 @@ const interviewKitSchema = new Schema<IInterviewKit>(
         default: 0,
       },
     },
+    generation: {
+      status: {
+        type: String,
+        enum: ["pending", "generating", "completed", "failed"],
+        default: "pending",
+      },
+      progress: {
+        type: Number,
+        default: 0,
+        min: 0,
+        max: 100,
+      },
+      current_step: {
+        type: String,
+        default: "Waiting to start",
+      },
+      error: {
+        type: String,
+        default: null,
+      },
+    },
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 const InterviewKit = mongoose.model<IInterviewKit>(
   "InterviewKit",
-  interviewKitSchema
+  interviewKitSchema,
 );
 
 export default InterviewKit;

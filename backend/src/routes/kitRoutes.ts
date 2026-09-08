@@ -5,6 +5,7 @@ import {
   getKitById,
   updateKit,
   deleteKit,
+  startKitGeneration,
 } from "../controllers/KitController.js";
 import { protect } from "../middleware/authMiddleware.js";
 
@@ -15,5 +16,7 @@ router.get("/:id", protect, getKitById);
 router.post("/", protect, createKit);
 router.put("/:id", protect, updateKit);
 router.delete("/:id", protect, deleteKit);
+router.post("/:id/generate", protect, startKitGeneration);
+
 
 export default router;

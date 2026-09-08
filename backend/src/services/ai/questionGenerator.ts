@@ -1,7 +1,7 @@
 import { generateText } from "./llmClient.js";
 import {
   questionsSchema,
-  GeneratedQuestion,
+  type GeneratedQuestion,
 } from "./schemas.js";
 import { questionGenerationPrompt } from "./prompts.js";
 
@@ -26,22 +26,50 @@ interface InterviewResearch {
   gaps: string[];
 }
 
+const parseJsonResponse = (rawResponse: string): unknown => {
+  const cleaned = rawResponse
+    .trim()
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    throw new Error(
+      "Gemini returned invalid JSON for question generation",
+    );
+  }
+};
+
+const normalizeQuestion = (question: string): string => {
+  return question
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+};
+
 export const generateQuestions = async (
   role: string,
   requirements: Requirement[],
   companyResearch: CompanyResearch,
-  interviewResearch: InterviewResearch
+  interviewResearch: InterviewResearch,
 ): Promise<GeneratedQuestion[]> => {
+  if (!role.trim()) {
+    throw new Error("Role cannot be empty");
+  }
+
   if (requirements.length === 0) {
     throw new Error(
-      "Cannot generate questions without requirements"
+      "Cannot generate questions without requirements",
     );
   }
 
   const requirementText = requirements
     .map(
       (requirement) =>
-        `${requirement.id}: ${requirement.text} | kind=${requirement.kind} | priority=${requirement.priority}`
+        `${requirement.id}: ${requirement.text} | kind=${requirement.kind} | priority=${requirement.priority}`,
     )
     .join("\n");
 
@@ -71,55 +99,80 @@ ${interviewResearch.gaps.join("\n")}
     role,
     requirementText,
     companyText,
-    interviewText
+    interviewText,
   );
 
   const rawResponse = await generateText(prompt);
 
-  let parsed: unknown;
-
-  try {
-    parsed = JSON.parse(rawResponse);
-  } catch {
-    throw new Error(
-      "Gemini returned invalid JSON for question generation"
-    );
-  }
+  const parsed = parseJsonResponse(rawResponse);
 
   const validated = questionsSchema.safeParse(parsed);
 
   if (!validated.success) {
     console.error(
       "Question validation error:",
-      validated.error
+      validated.error.flatten(),
     );
 
     throw new Error(
-      "Invalid question structure returned by Gemini"
+      "Invalid question structure returned by Gemini",
+    );
+  }
+
+  if (validated.data.questions.length === 0) {
+    throw new Error(
+      "Gemini returned no interview questions",
     );
   }
 
   const validRequirementIds = new Set(
-    requirements.map((requirement) => requirement.id)
+    requirements.map((requirement) => requirement.id),
   );
 
-  const invalidQuestions =
-    validated.data.questions.filter((question) =>
+  for (const question of validated.data.questions) {
+    const hasInvalidRequirementId =
       question.requirement_ids.some(
-        (id) => !validRequirementIds.has(id)
-      )
-    );
+        (id) => !validRequirementIds.has(id),
+      );
 
-  if (invalidQuestions.length > 0) {
+    if (hasInvalidRequirementId) {
+      throw new Error(
+        "Gemini generated questions with invalid requirement IDs",
+      );
+    }
+
+    if (question.requirement_ids.length === 0) {
+      throw new Error(
+        "Gemini generated a question without requirement IDs",
+      );
+    }
+  }
+
+  const seenQuestions = new Set<string>();
+
+  const uniqueQuestions = validated.data.questions.filter(
+    (question) => {
+      const key = normalizeQuestion(question.prompt);
+
+      if (seenQuestions.has(key)) {
+        return false;
+      }
+
+      seenQuestions.add(key);
+      return true;
+    },
+  );
+
+  if (uniqueQuestions.length === 0) {
     throw new Error(
-      "Gemini generated questions with invalid requirement IDs"
+      "No unique interview questions were generated",
     );
   }
 
-  return validated.data.questions.map(
+  return uniqueQuestions.map(
     (question, index) => ({
       ...question,
       id: `q${index + 1}`,
-    })
+    }),
   ) as GeneratedQuestion[];
 };

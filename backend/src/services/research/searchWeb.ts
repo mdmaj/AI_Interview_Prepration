@@ -1,25 +1,27 @@
 import { tavily } from "@tavily/core";
 
-const apiKey = process.env.TAVILY_API_KEY;
-
-if (!apiKey) {
-  throw new Error("TAVILY_API_KEY is not configured");
-}
-
-const client = tavily({
-  apiKey,
-});
-
 export interface WebSearchResult {
   title: string;
   url: string;
   content: string;
 }
 
-export const searchWeb = async (
-  query: string
-): Promise<WebSearchResult[]> => {
+const getTavilyClient = () => {
+  const apiKey = process.env.TAVILY_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("TAVILY_API_KEY is not configured");
+  }
+
+  return tavily({
+    apiKey,
+  });
+};
+
+export const searchWeb = async (query: string): Promise<WebSearchResult[]> => {
   try {
+    const client = getTavilyClient();
+
     const response = await client.search(query, {
       searchDepth: "basic",
       maxResults: 5,
@@ -32,6 +34,7 @@ export const searchWeb = async (
     }));
   } catch (error) {
     console.error(`Web search failed for query: ${query}`, error);
+
     throw new Error("Failed to search the web");
   }
 };

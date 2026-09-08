@@ -1,9 +1,9 @@
 import { generateText } from "./llmClient.js";
 import {
-  companyBriefSchema,
-  type CompanyBrief,
+  interviewResearchSchema,
+  type InterviewResearch,
 } from "./schemas.js";
-import { companyBriefPrompt } from "./prompts.js";
+import { interviewResearchPrompt } from "./researchPrompts.js";
 
 const parseJsonResponse = (rawResponse: string): unknown => {
   const cleaned = rawResponse
@@ -17,25 +17,31 @@ const parseJsonResponse = (rawResponse: string): unknown => {
     return JSON.parse(cleaned);
   } catch {
     throw new Error(
-      "Gemini returned invalid JSON while generating company brief",
+      "Gemini returned invalid JSON while generating interview research",
     );
   }
 };
 
-export const generateCompanyBrief = async (
+export const generateInterviewResearch = async (
   companyName: string,
+  roleTitle: string,
   researchText: string,
-): Promise<CompanyBrief> => {
+): Promise<InterviewResearch> => {
   if (!companyName.trim()) {
     throw new Error("Company name cannot be empty");
   }
 
-  if (!researchText.trim()) {
-    throw new Error("Company research cannot be empty");
+  if (!roleTitle.trim()) {
+    throw new Error("Role title cannot be empty");
   }
 
-  const prompt = companyBriefPrompt(
+  if (!researchText.trim()) {
+    throw new Error("Interview research input cannot be empty");
+  }
+
+  const prompt = interviewResearchPrompt(
     companyName,
+    roleTitle,
     researchText,
   );
 
@@ -44,16 +50,16 @@ export const generateCompanyBrief = async (
   const parsedResponse = parseJsonResponse(rawResponse);
 
   const validationResult =
-    companyBriefSchema.safeParse(parsedResponse);
+    interviewResearchSchema.safeParse(parsedResponse);
 
   if (!validationResult.success) {
     console.error(
-      "Company brief validation failed:",
+      "Interview research validation failed:",
       validationResult.error.flatten(),
     );
 
     throw new Error(
-      "Gemini returned an invalid company brief structure",
+      "Gemini returned an invalid interview research structure",
     );
   }
 

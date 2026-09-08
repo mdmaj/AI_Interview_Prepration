@@ -1,7 +1,7 @@
 import { generateText } from "./llmClient.js";
 import {
   flashcardsSchema,
-  GeneratedFlashcard,
+  type GeneratedFlashcard,
 } from "./schemas.js";
 import { flashcardGenerationPrompt } from "./prompts.js";
 
@@ -21,11 +21,39 @@ interface Question {
   difficulty: 1 | 2 | 3;
 }
 
+const parseJsonResponse = (rawResponse: string): unknown => {
+  const cleaned = rawResponse
+    .trim()
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    throw new Error(
+      "Gemini returned invalid JSON for flashcard generation",
+    );
+  }
+};
+
+const normalizeText = (text: string): string => {
+  return text
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+};
+
 export const generateFlashcards = async (
   role: string,
   requirements: Requirement[],
-  questions: Question[]
+  questions: Question[],
 ): Promise<GeneratedFlashcard[]> => {
+  if (!role.trim()) {
+    throw new Error("Role cannot be empty");
+  }
+
   if (questions.length === 0) {
     return [];
   }
@@ -33,7 +61,7 @@ export const generateFlashcards = async (
   const requirementText = requirements
     .map(
       (requirement) =>
-        `${requirement.id}: ${requirement.text} | priority=${requirement.priority}`
+        `${requirement.id}: ${requirement.text} | priority=${requirement.priority}`,
     )
     .join("\n");
 
@@ -44,63 +72,76 @@ ${question.id}
 Requirement IDs: ${question.requirement_ids.join(", ")}
 Question: ${question.prompt}
 Answer outline: ${question.answer_outline}
-`
+`,
     )
     .join("\n");
 
   const prompt = flashcardGenerationPrompt(
     role,
     requirementText,
-    questionText
+    questionText,
   );
 
   const rawResponse = await generateText(prompt);
 
-  let parsed: unknown;
+  const parsed = parseJsonResponse(rawResponse);
 
-  try {
-    parsed = JSON.parse(rawResponse);
-  } catch {
-    throw new Error(
-      "Gemini returned invalid JSON for flashcard generation"
-    );
-  }
-
-  const validated =
-    flashcardsSchema.safeParse(parsed);
+  const validated = flashcardsSchema.safeParse(parsed);
 
   if (!validated.success) {
     console.error(
       "Flashcard validation error:",
-      validated.error
+      validated.error.flatten(),
     );
 
     throw new Error(
-      "Invalid flashcard structure returned by Gemini"
+      "Invalid flashcard structure returned by Gemini",
     );
   }
 
   const validRequirementIds = new Set(
-    requirements.map((requirement) => requirement.id)
+    requirements.map((requirement) => requirement.id),
   );
 
-  const invalidFlashcards =
-    validated.data.flashcards.filter((flashcard) =>
+  for (const flashcard of validated.data.flashcards) {
+    const hasInvalidRequirementId =
       flashcard.requirement_ids.some(
-        (id) => !validRequirementIds.has(id)
-      )
-    );
+        (id) => !validRequirementIds.has(id),
+      );
 
-  if (invalidFlashcards.length > 0) {
-    throw new Error(
-      "Gemini generated flashcards with invalid requirement IDs"
-    );
+    if (hasInvalidRequirementId) {
+      throw new Error(
+        "Gemini generated flashcards with invalid requirement IDs",
+      );
+    }
+
+    if (flashcard.requirement_ids.length === 0) {
+      throw new Error(
+        "Gemini generated a flashcard without requirement IDs",
+      );
+    }
   }
 
-  return validated.data.flashcards.map(
+  const seen = new Set<string>();
+
+  const uniqueFlashcards =
+    validated.data.flashcards.filter((flashcard) => {
+      const key = `${normalizeText(flashcard.front)}|${normalizeText(
+        flashcard.back,
+      )}`;
+
+      if (seen.has(key)) {
+        return false;
+      }
+
+      seen.add(key);
+      return true;
+    });
+
+  return uniqueFlashcards.map(
     (flashcard, index) => ({
       ...flashcard,
       id: `f${index + 1}`,
-    })
+    }),
   ) as GeneratedFlashcard[];
 };

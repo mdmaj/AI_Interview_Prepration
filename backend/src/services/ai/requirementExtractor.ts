@@ -14,8 +14,25 @@ export interface ExtractedRoleWithIds extends ExtractedRole {
   }>;
 }
 
+const parseJsonResponse = (rawResponse: string): unknown => {
+  const cleaned = rawResponse
+    .trim()
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    throw new Error(
+      "Gemini returned invalid JSON while extracting requirements",
+    );
+  }
+};
+
 export const extractRequirements = async (
-  jd: string
+  jd: string,
 ): Promise<ExtractedRoleWithIds> => {
   if (!jd.trim()) {
     throw new Error("Job description cannot be empty");
@@ -25,15 +42,7 @@ export const extractRequirements = async (
 
   const rawResponse = await generateText(prompt);
 
-  let parsedResponse: unknown;
-
-  try {
-    parsedResponse = JSON.parse(rawResponse);
-  } catch {
-    throw new Error(
-      "Gemini returned invalid JSON while extracting requirements"
-    );
-  }
+  const parsedResponse = parseJsonResponse(rawResponse);
 
   const validationResult =
     extractedRoleSchema.safeParse(parsedResponse);
@@ -41,11 +50,11 @@ export const extractRequirements = async (
   if (!validationResult.success) {
     console.error(
       "Requirement extraction validation failed:",
-      validationResult.error.flatten()
+      validationResult.error.flatten(),
     );
 
     throw new Error(
-      "Gemini returned an invalid requirement structure"
+      "Gemini returned an invalid requirement structure",
     );
   }
 
@@ -55,7 +64,7 @@ export const extractRequirements = async (
     (requirement, index) => ({
       id: `r${index + 1}`,
       ...requirement,
-    })
+    }),
   );
 
   return {

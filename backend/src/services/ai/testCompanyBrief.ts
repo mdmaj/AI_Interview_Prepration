@@ -1,42 +1,45 @@
 import dotenv from "dotenv";
+import { crawlCompany } from "../crawler/index.js";
+import { generateCompanyBrief } from "./companyBrief.js";
 
 dotenv.config();
 
-const runTest = async (): Promise<void> => {
-  try {
-    const { crawlCompany } = await import(
-      "../crawler/index.js"
-    );
+const run = async () => {
+  const company = "Microsoft";
+  const companyUrl = "https://www.microsoft.com/";
 
-    const { generateCompanyBrief } =
-      await import("./companyBrief.js");
+  console.log("🔎 Crawling company website...");
 
-    console.log("🔎 Crawling Microsoft...");
+  const research = await crawlCompany(companyUrl);
 
-    const research = await crawlCompany(
-      "https://www.microsoft.com"
-    );
+  const researchText = research.pages
+    .map(
+      (page) =>
+        `URL: ${page.url}\n` +
+        `TITLE: ${page.title}\n` +
+        `CONTENT: ${page.text}`,
+    )
+    .join("\n\n");
 
-    console.log(
-      `📄 Pages collected: ${research.pages.length}`
-    );
+  console.log(
+    `📄 Research pages: ${research.pages.length}`,
+  );
 
-    const brief = await generateCompanyBrief(
-      "Microsoft",
-      research.pages
-    );
+  console.log("🤖 Generating company brief...");
 
-    console.log("\n🏢 Company Brief:\n");
+  const brief = await generateCompanyBrief(
+    company,
+    researchText,
+  );
 
-    console.log(
-      JSON.stringify(brief, null, 2)
-    );
-  } catch (error) {
-    console.error(
-      "❌ Company Brief Error:",
-      error
-    );
-  }
+  console.log("\n🏢 Company Brief\n");
+
+  console.log(
+    JSON.stringify(brief, null, 2),
+  );
 };
 
-runTest();
+run().catch((error) => {
+  console.error("❌ Test failed:", error);
+  process.exit(1);
+});

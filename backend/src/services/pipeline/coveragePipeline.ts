@@ -47,40 +47,42 @@ export const runCoveragePipeline = async (
   requirements: Requirement[],
   questions: Question[],
   companyResearch: CompanyResearch,
-  interviewResearch: InterviewResearch
+  interviewResearch: InterviewResearch,
 ): Promise<CoveragePipelineResult> => {
   let currentQuestions = [...questions];
 
+  // Initial deterministic coverage check.
   let coverage = checkCoverage(
     requirements,
-    currentQuestions
+    currentQuestions,
   );
 
   let passes = 1;
 
-  // Maximum 2 total coverage checks/passes.
-  while (
-    !coverage.is_complete &&
-    passes < 2
-  ) {
-    const uncoveredRequirements =
-      requirements.filter((requirement) =>
-        coverage.uncovered_requirement_ids.includes(
-          requirement.id
-        )
+  // One additional repair pass is allowed.
+  while (!coverage.is_complete && passes < 2) {
+    // Only uncovered MUST-HAVE requirements should
+    // trigger the second-pass question generation.
+    const uncoveredMustHaveRequirements =
+      requirements.filter(
+        (requirement) =>
+          requirement.priority === "must" &&
+          coverage.must_have_uncovered.includes(
+            requirement.id,
+          ),
       );
 
-    if (uncoveredRequirements.length === 0) {
+    if (uncoveredMustHaveRequirements.length === 0) {
       break;
     }
 
     const missingQuestions =
       await generateMissingQuestions(
         role,
-        uncoveredRequirements,
+        uncoveredMustHaveRequirements,
         companyResearch,
         interviewResearch,
-        currentQuestions.length
+        currentQuestions.length,
       );
 
     if (missingQuestions.length === 0) {
@@ -94,7 +96,7 @@ export const runCoveragePipeline = async (
 
     coverage = checkCoverage(
       requirements,
-      currentQuestions
+      currentQuestions,
     );
 
     passes += 1;

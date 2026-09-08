@@ -17,20 +17,32 @@ export interface CoverageResult {
 
 export const checkCoverage = (
   requirements: CoverageRequirement[],
-  questions: CoverageQuestion[]
+  questions: CoverageQuestion[],
 ): CoverageResult => {
+  const validRequirementIds = new Set(
+    requirements.map((requirement) => requirement.id),
+  );
+
   const coveredRequirementIds = new Set<string>();
 
   for (const question of questions) {
     for (const requirementId of question.requirement_ids) {
-      coveredRequirementIds.add(requirementId);
+      if (validRequirementIds.has(requirementId)) {
+        coveredRequirementIds.add(requirementId);
+      }
     }
   }
+
+  const coveredRequirementIdsList = requirements
+    .filter((requirement) =>
+      coveredRequirementIds.has(requirement.id),
+    )
+    .map((requirement) => requirement.id);
 
   const uncoveredRequirementIds = requirements
     .filter(
       (requirement) =>
-        !coveredRequirementIds.has(requirement.id)
+        !coveredRequirementIds.has(requirement.id),
     )
     .map((requirement) => requirement.id);
 
@@ -38,17 +50,13 @@ export const checkCoverage = (
     .filter(
       (requirement) =>
         requirement.priority === "must" &&
-        !coveredRequirementIds.has(requirement.id)
+        !coveredRequirementIds.has(requirement.id),
     )
     .map((requirement) => requirement.id);
 
   return {
     uncovered_requirement_ids: uncoveredRequirementIds,
-    covered_requirement_ids: requirements
-      .filter((requirement) =>
-        coveredRequirementIds.has(requirement.id)
-      )
-      .map((requirement) => requirement.id),
+    covered_requirement_ids: coveredRequirementIdsList,
     must_have_uncovered: mustHaveUncovered,
     is_complete: mustHaveUncovered.length === 0,
   };

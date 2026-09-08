@@ -1,10 +1,11 @@
 import { Response } from "express";
 import InterviewKit from "../models/InterviewKit.js";
 import { AuthRequest } from "../middleware/authMiddleware.js";
+import { generateInterviewKit } from "../services/pipeline/generateInterviewKit.js";
 
 export const createKit = async (
   req: AuthRequest,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     if (!req.userId) {
@@ -49,6 +50,7 @@ export const createKit = async (
         company_url,
         role,
         location,
+        jd,
         jd_chars: jd.length,
         researched_at: new Date().toISOString(),
         pages_used: [],
@@ -80,6 +82,13 @@ export const createKit = async (
         uncovered_requirement_ids: [],
         passes: 0,
       },
+
+      generation: {
+        status: "pending",
+        progress: 0,
+        current_step: "Ready to generate",
+        error: null,
+      },
     });
 
     res.status(201).json({
@@ -97,10 +106,9 @@ export const createKit = async (
   }
 };
 
-
 export const getMyKits = async (
   req: AuthRequest,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     if (!req.userId) {
@@ -130,10 +138,9 @@ export const getMyKits = async (
   }
 };
 
-
 export const getKitById = async (
   req: AuthRequest,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     if (!req.userId) {
@@ -144,7 +151,9 @@ export const getKitById = async (
       return;
     }
 
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id)
+      ? req.params.id[0]
+      : req.params.id;
 
     const kit = await InterviewKit.findOne({
       _id: id,
@@ -175,7 +184,7 @@ export const getKitById = async (
 
 export const updateKit = async (
   req: AuthRequest,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     if (!req.userId) {
@@ -186,7 +195,9 @@ export const updateKit = async (
       return;
     }
 
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id)
+      ? req.params.id[0]
+      : req.params.id;
 
     const kit = await InterviewKit.findOne({
       _id: id,
@@ -251,10 +262,9 @@ export const updateKit = async (
   }
 };
 
-
 export const deleteKit = async (
   req: AuthRequest,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     if (!req.userId) {
@@ -290,6 +300,81 @@ export const deleteKit = async (
     res.status(500).json({
       success: false,
       message: "Failed to delete interview kit",
+    });
+  }
+};
+
+export const startKitGeneration = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
+  try {
+    if (!req.userId) {
+      res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+      return;
+    }
+
+    const id = Array.isArray(req.params.id)
+      ? req.params.id[0]
+      : req.params.id;
+
+    const kit = await InterviewKit.findOne({
+      _id: id,
+      user_id: req.userId,
+    });
+
+    if (!kit) {
+      res.status(404).json({
+        success: false,
+        message: "Interview kit not found",
+      });
+      return;
+    }
+
+    // Prevent duplicate generation
+    if (kit.generation.status === "generating") {
+      res.status(409).json({
+        success: false,
+        message: "Kit generation is already in progress",
+      });
+      return;
+    }
+
+    // Reset generation state
+    kit.generation = {
+      status: "generating",
+      progress: 5,
+      current_step: "Starting interview kit generation",
+      error: null,
+    };
+
+    await kit.save();
+
+    // Return immediately so the frontend can start polling.
+    res.status(202).json({
+      success: true,
+      message: "Interview kit generation started",
+      kit,
+    });
+
+    // Run the real AI generation pipeline in the background.
+    // The pipeline itself is responsible for updating progress
+    // and marking the kit as completed or failed.
+    generateInterviewKit({
+      kitId: id,
+      userId: req.userId,
+    }).catch((error) => {
+      console.error("Background generation failed:", error);
+    });
+  } catch (error) {
+    console.error("Start kit generation error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to start interview kit generation",
     });
   }
 };
