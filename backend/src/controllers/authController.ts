@@ -49,10 +49,31 @@ export const register = async (
       password: hashedPassword,
     });
 
+    const jwtSecret = process.env.JWT_SECRET;
+
+    if (!jwtSecret) {
+      res.status(500).json({
+        success: false,
+        message: "JWT_SECRET is not configured",
+      });
+      return;
+    }
+
+    const token = jwt.sign(
+      {
+        userId: user._id.toString(),
+      },
+      jwtSecret,
+      {
+        expiresIn: "7d",
+      }
+    );
+
     // Send response
     res.status(201).json({
       success: true,
       message: "User registered successfully",
+      token,
       user: {
         id: user._id,
         name: user.name,
