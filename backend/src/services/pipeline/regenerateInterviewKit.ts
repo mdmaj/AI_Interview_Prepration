@@ -4,6 +4,7 @@ import InterviewKit, {
   type Requirement,
   type QuestionCategory,
   type QuestionDifficulty,
+  type ScheduleDay,
 } from "../../models/InterviewKit.js";
 
 import { generateCompanyBrief } from "../ai/companyBrief.js";
@@ -33,13 +34,26 @@ interface RegenerateOptions {
 
 const MAX_RESEARCH_CHARS = 60000;
 
+/*
+ * ============================================================
+ * Types
+ * ============================================================
+ */
+
 type GeneratedQuestionShape = {
+  id?: string;
   requirement_ids: string[];
   category: QuestionCategory;
   prompt: string;
   answer_outline: string;
   difficulty: QuestionDifficulty;
 };
+
+/*
+ * ============================================================
+ * Generation Progress
+ * ============================================================
+ */
 
 const updateGeneration = async (
   kitId: string,
@@ -63,6 +77,12 @@ const updateGeneration = async (
   );
 };
 
+/*
+ * ============================================================
+ * ID Helpers
+ * ============================================================
+ */
+
 const createQuestionId = (): string => {
   return `q_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 };
@@ -71,9 +91,21 @@ const createFlashcardId = (): string => {
   return `f_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 };
 
+/*
+ * ============================================================
+ * Text Helpers
+ * ============================================================
+ */
+
 const normalizeText = (text: string): string => {
   return text.toLowerCase().replace(/\s+/g, " ").trim();
 };
+
+/*
+ * ============================================================
+ * Research Helpers
+ * ============================================================
+ */
 
 const buildResearchText = (
   pages: Array<{
@@ -145,10 +177,12 @@ const getInterviewResearch = async (company: string, role: string) => {
   }
 };
 
-/**
- * Sanitize generated questions while preserving their
- * original type and, when present, their ID.
+/*
+ * ============================================================
+ * Question Sanitization
+ * ============================================================
  */
+
 const sanitizeGeneratedQuestions = <T extends GeneratedQuestionShape>(
   questions: T[],
   validRequirementIds: Set<string>,
@@ -198,11 +232,18 @@ const sanitizeGeneratedQuestions = <T extends GeneratedQuestionShape>(
   });
 };
 
-/**
- * Merge preserved user content with regenerated content.
+/*
+ * ============================================================
+ * Question Merge
+ * ============================================================
  *
- * Preserved questions always win when the prompt is duplicated.
+ * Edited/pinned questions always win.
+ *
+ * Preserved questions are inserted first so that a regenerated
+ * duplicate never replaces user-owned content.
+ * ============================================================
  */
+
 const mergeQuestionsWithoutDuplicates = (
   preservedQuestions: Question[],
   regeneratedQuestions: Question[],
@@ -210,36 +251,34 @@ const mergeQuestionsWithoutDuplicates = (
   const result: Question[] = [];
   const seenPrompts = new Set<string>();
 
-  for (const question of preservedQuestions) {
+  const addQuestion = (question: Question): void => {
     const key = normalizeText(question.prompt);
 
     if (!key || seenPrompts.has(key)) {
-      continue;
+      return;
     }
 
     seenPrompts.add(key);
     result.push(question);
+  };
+
+  for (const question of preservedQuestions) {
+    addQuestion(question);
   }
 
   for (const question of regeneratedQuestions) {
-    const key = normalizeText(question.prompt);
-
-    if (!key || seenPrompts.has(key)) {
-      continue;
-    }
-
-    seenPrompts.add(key);
-    result.push(question);
+    addQuestion(question);
   }
 
   return result;
 };
 
-/**
- * Merge preserved user flashcards with regenerated flashcards.
- *
- * Preserved flashcards always win when front/back are duplicated.
+/*
+ * ============================================================
+ * Flashcard Merge
+ * ============================================================
  */
+
 const mergeFlashcardsWithoutDuplicates = (
   preservedFlashcards: Flashcard[],
   regeneratedFlashcards: Flashcard[],
@@ -247,36 +286,35 @@ const mergeFlashcardsWithoutDuplicates = (
   const result: Flashcard[] = [];
   const seen = new Set<string>();
 
-  for (const flashcard of preservedFlashcards) {
+  const addFlashcard = (flashcard: Flashcard): void => {
     const key =
       `${normalizeText(flashcard.front)}|` + `${normalizeText(flashcard.back)}`;
 
-    if (seen.has(key)) {
-      continue;
+    if (!key || seen.has(key)) {
+      return;
     }
 
     seen.add(key);
     result.push(flashcard);
+  };
+
+  for (const flashcard of preservedFlashcards) {
+    addFlashcard(flashcard);
   }
 
   for (const flashcard of regeneratedFlashcards) {
-    const key =
-      `${normalizeText(flashcard.front)}|` + `${normalizeText(flashcard.back)}`;
-
-    if (seen.has(key)) {
-      continue;
-    }
-
-    seen.add(key);
-    result.push(flashcard);
+    addFlashcard(flashcard);
   }
 
   return result;
 };
 
-/**
- * Calculate coverage from the FINAL question set.
+/*
+ * ============================================================
+ * Coverage
+ * ============================================================
  */
+
 const calculateFinalCoverage = (
   requirements: Requirement[],
   questions: Question[],
@@ -311,16 +349,587 @@ const calculateFinalCoverage = (
   };
 };
 
-/**
- * Regenerate one section of an existing interview kit.
- *
- * Important:
- * - Only the selected content is regenerated.
- * - User-edited content is preserved.
- * - User-pinned content is preserved.
- * - When questions are regenerated, the dependent schedule is
- *   rebuilt from the FINAL question IDs so the kit remains valid.
+/*
+ * ============================================================
+ * Question Validation
+ * ============================================================
  */
+
+const validateQuestions = (
+  questions: Question[],
+  validRequirementIds: Set<string>,
+): void => {
+  const seenIds = new Set<string>();
+  const seenPrompts = new Set<string>();
+
+  for (const question of questions) {
+    if (!question.id?.trim()) {
+      throw new Error("A question is missing an ID.");
+    }
+
+    if (seenIds.has(question.id)) {
+      throw new Error(`Duplicate question ID "${question.id}".`);
+    }
+
+    seenIds.add(question.id);
+
+    if (!question.prompt?.trim()) {
+      throw new Error(`Question "${question.id}" has an empty prompt.`);
+    }
+
+    if (!question.answer_outline?.trim()) {
+      throw new Error(`Question "${question.id}" has an empty answer outline.`);
+    }
+
+    if (!question.requirement_ids?.length) {
+      throw new Error(`Question "${question.id}" has no requirement IDs.`);
+    }
+
+    for (const requirementId of question.requirement_ids) {
+      if (!validRequirementIds.has(requirementId)) {
+        throw new Error(
+          `Question "${question.id}" contains invalid requirement ID "${requirementId}".`,
+        );
+      }
+    }
+
+    const promptKey = normalizeText(question.prompt);
+
+    if (seenPrompts.has(promptKey)) {
+      throw new Error(
+        `Duplicate question prompt detected: "${question.prompt}".`,
+      );
+    }
+
+    seenPrompts.add(promptKey);
+
+    if (![1, 2, 3].includes(question.difficulty)) {
+      throw new Error(`Question "${question.id}" has invalid difficulty.`);
+    }
+  }
+};
+
+/*
+ * ============================================================
+ * Flashcard Validation
+ * ============================================================
+ */
+
+const validateFlashcards = (
+  flashcards: Flashcard[],
+  validRequirementIds: Set<string>,
+): void => {
+  const seenIds = new Set<string>();
+  const seenContent = new Set<string>();
+
+  for (const flashcard of flashcards) {
+    if (!flashcard.id?.trim()) {
+      throw new Error("A flashcard is missing an ID.");
+    }
+
+    if (seenIds.has(flashcard.id)) {
+      throw new Error(`Duplicate flashcard ID "${flashcard.id}".`);
+    }
+
+    seenIds.add(flashcard.id);
+
+    if (!flashcard.front?.trim()) {
+      throw new Error(`Flashcard "${flashcard.id}" has an empty front.`);
+    }
+
+    if (!flashcard.back?.trim()) {
+      throw new Error(`Flashcard "${flashcard.id}" has an empty back.`);
+    }
+
+    if (!flashcard.requirement_ids?.length) {
+      throw new Error(`Flashcard "${flashcard.id}" has no requirement IDs.`);
+    }
+
+    for (const requirementId of flashcard.requirement_ids) {
+      if (!validRequirementIds.has(requirementId)) {
+        throw new Error(
+          `Flashcard "${flashcard.id}" contains invalid requirement ID "${requirementId}".`,
+        );
+      }
+    }
+
+    const contentKey =
+      `${normalizeText(flashcard.front)}|` + `${normalizeText(flashcard.back)}`;
+
+    if (seenContent.has(contentKey)) {
+      throw new Error(
+        `Duplicate flashcard content detected: "${flashcard.front}".`,
+      );
+    }
+
+    seenContent.add(contentKey);
+  }
+};
+
+/*
+ * ============================================================
+ * Schedule Helpers
+ * ============================================================
+ */
+
+const cleanScheduleQuestionIds = (
+  schedule: {
+    days_available: number;
+    days: ScheduleDay[];
+  },
+  questions: Question[],
+): {
+  days_available: number;
+  days: ScheduleDay[];
+} => {
+  const validQuestionIds = new Set(questions.map((question) => question.id));
+
+  return {
+    days_available: schedule.days_available,
+
+    days: schedule.days.map((day) => ({
+      ...day,
+
+      question_ids: [
+        ...new Set(
+          (day.question_ids ?? []).filter((questionId) =>
+            validQuestionIds.has(questionId),
+          ),
+        ),
+      ],
+    })),
+  };
+};
+
+/*
+ * ------------------------------------------------------------
+ * Build generated schedule with model flags
+ * ------------------------------------------------------------
+ */
+
+const mapGeneratedSchedule = (schedule: {
+  days_available: number;
+  days: Array<{
+    day: number;
+    focus: string;
+    question_ids: string[];
+    minutes: number;
+  }>;
+}): {
+  days_available: number;
+  days: ScheduleDay[];
+} => {
+  return {
+    days_available: schedule.days_available,
+
+    days: schedule.days.map((day) => ({
+      day: day.day,
+      focus: day.focus,
+      question_ids: [...day.question_ids],
+      minutes: day.minutes,
+      is_edited: false,
+      is_pinned: false,
+    })),
+  };
+};
+
+/*
+ * ------------------------------------------------------------
+ * Merge regenerated schedule with user-owned schedule state
+ * ------------------------------------------------------------
+ *
+ * Rules:
+ *
+ * 1. Edited/pinned days always survive.
+ * 2. Untouched days are regenerated.
+ * 3. Invalid question IDs are removed.
+ * 4. A generated day will not duplicate a question already
+ *    assigned to a preserved day where possible.
+ * 5. Missing must-have requirement coverage is repaired using
+ *    generated/unpreserved days.
+ * ------------------------------------------------------------
+ */
+
+const mergeSchedulesPreservingUserState = (
+  existingSchedule: {
+    days_available: number;
+    days: ScheduleDay[];
+  },
+  regeneratedSchedule: {
+    days_available: number;
+    days: ScheduleDay[];
+  },
+  questions: Question[],
+  requirements: Requirement[],
+): {
+  days_available: number;
+  days: ScheduleDay[];
+} => {
+  const validQuestionIds = new Set(questions.map((question) => question.id));
+
+  const questionById = new Map(
+    questions.map((question) => [question.id, question]),
+  );
+
+  const existingDaysByNumber = new Map<number, ScheduleDay>();
+
+  for (const day of existingSchedule.days ?? []) {
+    existingDaysByNumber.set(day.day, day);
+  }
+
+  const generatedDaysByNumber = new Map<number, ScheduleDay>();
+
+  for (const day of regeneratedSchedule.days ?? []) {
+    generatedDaysByNumber.set(day.day, day);
+  }
+
+  /*
+   * ----------------------------------------------------------
+   * First preserve edited/pinned days.
+   * ----------------------------------------------------------
+   */
+
+  const preservedDays = new Map<number, ScheduleDay>();
+
+  for (const day of existingSchedule.days ?? []) {
+    if (day.is_edited || day.is_pinned) {
+      preservedDays.set(day.day, {
+        ...day,
+        question_ids: [
+          ...new Set(
+            (day.question_ids ?? []).filter((questionId) =>
+              validQuestionIds.has(questionId),
+            ),
+          ),
+        ],
+      });
+    }
+  }
+
+  /*
+   * ----------------------------------------------------------
+   * Questions already owned by preserved schedule days.
+   * ----------------------------------------------------------
+   */
+
+  const assignedQuestionIds = new Set<string>();
+
+  for (const day of preservedDays.values()) {
+    for (const questionId of day.question_ids) {
+      assignedQuestionIds.add(questionId);
+    }
+  }
+
+  /*
+   * ----------------------------------------------------------
+   * Build final days.
+   * ----------------------------------------------------------
+   */
+
+  const finalDays: ScheduleDay[] = [];
+
+  const totalDays = existingSchedule.days_available;
+
+  for (let dayNumber = 1; dayNumber <= totalDays; dayNumber += 1) {
+    const preservedDay = preservedDays.get(dayNumber);
+
+    if (preservedDay) {
+      finalDays.push(preservedDay);
+      continue;
+    }
+
+    const generatedDay = generatedDaysByNumber.get(dayNumber);
+
+    if (!generatedDay) {
+      const existingDay = existingDaysByNumber.get(dayNumber);
+
+      if (existingDay) {
+        finalDays.push({
+          ...existingDay,
+          question_ids: [
+            ...new Set(
+              (existingDay.question_ids ?? []).filter((questionId) =>
+                validQuestionIds.has(questionId),
+              ),
+            ),
+          ],
+        });
+      }
+
+      continue;
+    }
+
+    const filteredQuestionIds = [
+      ...new Set(
+        (generatedDay.question_ids ?? []).filter(
+          (questionId) =>
+            validQuestionIds.has(questionId) &&
+            !assignedQuestionIds.has(questionId),
+        ),
+      ),
+    ];
+
+    for (const questionId of filteredQuestionIds) {
+      assignedQuestionIds.add(questionId);
+    }
+
+    finalDays.push({
+      ...generatedDay,
+      question_ids: filteredQuestionIds,
+      is_edited: false,
+      is_pinned: false,
+    });
+  }
+
+  /*
+   * ----------------------------------------------------------
+   * Make sure every expected day exists.
+   * ----------------------------------------------------------
+   */
+
+  const existingFinalDayNumbers = new Set(finalDays.map((day) => day.day));
+
+  for (let dayNumber = 1; dayNumber <= totalDays; dayNumber += 1) {
+    if (existingFinalDayNumbers.has(dayNumber)) {
+      continue;
+    }
+
+    const generatedDay = generatedDaysByNumber.get(dayNumber);
+
+    if (generatedDay) {
+      finalDays.push({
+        ...generatedDay,
+        is_edited: false,
+        is_pinned: false,
+      });
+
+      continue;
+    }
+
+    finalDays.push({
+      day: dayNumber,
+      focus: "Interview preparation",
+      question_ids: [],
+      minutes: 0,
+      is_edited: false,
+      is_pinned: false,
+    });
+  }
+
+  finalDays.sort((a, b) => a.day - b.day);
+
+  /*
+   * ----------------------------------------------------------
+   * Repair missing MUST-HAVE requirement coverage.
+   * ----------------------------------------------------------
+   *
+   * Only unpreserved days are modified.
+   * ----------------------------------------------------------
+   */
+
+  const scheduledRequirementIds = new Set<string>();
+
+  for (const day of finalDays) {
+    for (const questionId of day.question_ids) {
+      const question = questionById.get(questionId);
+
+      if (!question) {
+        continue;
+      }
+
+      for (const requirementId of question.requirement_ids) {
+        scheduledRequirementIds.add(requirementId);
+      }
+    }
+  }
+
+  const mustHaveRequirements = requirements.filter(
+    (requirement) => requirement.priority === "must",
+  );
+
+  const uncoveredMustRequirements = mustHaveRequirements.filter(
+    (requirement) => !scheduledRequirementIds.has(requirement.id),
+  );
+
+  if (uncoveredMustRequirements.length > 0) {
+    const unpreservedDays = finalDays.filter(
+      (day) => !day.is_edited && !day.is_pinned,
+    );
+
+    for (const requirement of uncoveredMustRequirements) {
+      const matchingQuestion = questions.find(
+        (question) =>
+          question.requirement_ids.includes(requirement.id) &&
+          !assignedQuestionIds.has(question.id),
+      );
+
+      if (!matchingQuestion) {
+        continue;
+      }
+
+      const targetDay =
+        unpreservedDays.find((day) => day.question_ids.length === 0) ??
+        unpreservedDays[unpreservedDays.length - 1];
+
+      if (!targetDay) {
+        /*
+         * Every day is edited/pinned, so changing the schedule
+         * would violate the user's explicit preservation state.
+         */
+        continue;
+      }
+
+      targetDay.question_ids = [...targetDay.question_ids, matchingQuestion.id];
+
+      assignedQuestionIds.add(matchingQuestion.id);
+
+      for (const requirementId of matchingQuestion.requirement_ids) {
+        scheduledRequirementIds.add(requirementId);
+      }
+    }
+  }
+
+  /*
+   * ----------------------------------------------------------
+   * Final question ID cleanup + deduplication.
+   * ----------------------------------------------------------
+   */
+
+  const seenAcrossSchedule = new Set<string>();
+
+  for (const day of finalDays) {
+    const cleanedIds: string[] = [];
+
+    for (const questionId of day.question_ids) {
+      if (!validQuestionIds.has(questionId)) {
+        continue;
+      }
+
+      /*
+       * Preserved days are allowed to retain their original
+       * question assignments.
+       */
+      if (day.is_edited || day.is_pinned) {
+        cleanedIds.push(questionId);
+        continue;
+      }
+
+      if (seenAcrossSchedule.has(questionId)) {
+        continue;
+      }
+
+      seenAcrossSchedule.add(questionId);
+      cleanedIds.push(questionId);
+    }
+
+    day.question_ids = [...new Set(cleanedIds)];
+  }
+
+  return {
+    days_available: totalDays,
+    days: finalDays.slice(0, totalDays),
+  };
+};
+
+/*
+ * ============================================================
+ * Practice Helpers
+ * ============================================================
+ */
+
+const cleanPracticeForFlashcards = (
+  practiceFlashcards: Array<{
+    flashcard_id: string;
+    confidence: "low" | "medium" | "high";
+    is_covered: boolean;
+  }>,
+  flashcards: Flashcard[],
+) => {
+  const validFlashcardIds = new Set(
+    flashcards.map((flashcard) => flashcard.id),
+  );
+
+  const seen = new Set<string>();
+
+  return practiceFlashcards.filter((practice) => {
+    if (!validFlashcardIds.has(practice.flashcard_id)) {
+      return false;
+    }
+
+    if (seen.has(practice.flashcard_id)) {
+      return false;
+    }
+
+    seen.add(practice.flashcard_id);
+
+    return true;
+  });
+};
+
+/*
+ * ============================================================
+ * Final Candidate Validation
+ * ============================================================
+ */
+
+const validateCandidateKit = (
+  candidate: {
+    source: {
+      company: string;
+      company_url: string;
+      role: string;
+      location: string;
+      jd_chars: number;
+      researched_at: string;
+      pages_used: string[];
+    };
+
+    company_brief: {
+      summary: string;
+      what_they_do: string;
+      sources: string[];
+      is_edited?: boolean;
+      is_pinned?: boolean;
+    };
+
+    role: {
+      title: string;
+      seniority: string;
+      responsibilities: string[];
+      requirements: Requirement[];
+    };
+
+    questions: Question[];
+
+    flashcards: Flashcard[];
+
+    schedule: {
+      days_available: number;
+      days: ScheduleDay[];
+    };
+
+    coverage: {
+      uncovered_requirement_ids: string[];
+      passes: number;
+    };
+  },
+  expectedDays: number,
+): void => {
+  const validation = validateFinalKit(candidate, expectedDays);
+
+  if (!validation.is_valid) {
+    throw new Error(
+      `Regenerated kit validation failed: ${validation.errors.join(" | ")}`,
+    );
+  }
+};
+
+/*
+ * ============================================================
+ * Main Regeneration Service
+ * ============================================================
+ */
+
 export const regenerateInterviewKit = async ({
   kitId,
   userId,
@@ -354,11 +963,56 @@ export const regenerateInterviewKit = async ({
 
     /*
      * --------------------------------------------------
+     * CREATE WORKING STATE
+     * --------------------------------------------------
+     */
+
+    let candidateQuestions: Question[] = [...(kit.questions ?? [])];
+
+    let candidateFlashcards: Flashcard[] = [...(kit.flashcards ?? [])];
+
+    let candidateSchedule = cleanScheduleQuestionIds(
+      {
+        days_available: kit.schedule.days_available,
+        days: kit.schedule.days ?? [],
+      },
+      candidateQuestions,
+    );
+
+    let candidateCoverage = {
+      uncovered_requirement_ids: [
+        ...(kit.coverage.uncovered_requirement_ids ?? []),
+      ],
+      passes: kit.coverage.passes ?? 0,
+    };
+
+    /*
+     * IMPORTANT:
+     *
+     * Preserve company brief edit/pin metadata.
+     */
+
+    let candidateCompanyBrief = {
+      summary: kit.company_brief.summary,
+      what_they_do: kit.company_brief.what_they_do,
+      sources: [...(kit.company_brief.sources ?? [])],
+      is_edited: Boolean(kit.company_brief.is_edited),
+      is_pinned: Boolean(kit.company_brief.is_pinned),
+    };
+
+    let candidatePagesUsed = [...(kit.source.pages_used ?? [])];
+
+    let candidateResearchedAt = kit.source.researched_at;
+
+    let candidatePracticeFlashcards = [...(kit.practice?.flashcards ?? [])];
+
+    /*
+     * --------------------------------------------------
      * VALID REQUIREMENT IDS
      * --------------------------------------------------
      */
 
-    const validRequirementIds: Set<string> = new Set<string>(
+    const validRequirementIds = new Set<string>(
       kit.role.requirements.map((requirement: Requirement) => requirement.id),
     );
 
@@ -374,6 +1028,7 @@ export const regenerateInterviewKit = async ({
         title: string;
         text: string;
       }>,
+
       failedUrls: [] as string[],
     };
 
@@ -387,14 +1042,18 @@ export const regenerateInterviewKit = async ({
         kit.source.company_url,
         kit.source.company,
       );
+
+      if (companyResearch.pages.length > 0) {
+        candidatePagesUsed = companyResearch.pages.map((page) => page.url);
+
+        candidateResearchedAt = new Date().toISOString();
+      }
     }
 
-    const pagesUsed = companyResearch.pages.map((page) => page.url);
-
     /*
-     * --------------------------------------------------
+     * ==================================================
      * COMPANY BRIEF
-     * --------------------------------------------------
+     * ==================================================
      */
 
     if (section === "company_brief") {
@@ -406,40 +1065,51 @@ export const regenerateInterviewKit = async ({
         kit.source.company_url,
       );
 
-      const companyBrief = await generateCompanyBrief(
+      const generatedBrief = await generateCompanyBrief(
         kit.source.company,
         researchText,
+        candidatePagesUsed,
       );
 
-      await InterviewKit.findOneAndUpdate(
-        {
-          _id: kitId,
-          user_id: userId,
-        },
-        {
-          $set: {
-            "company_brief.summary": companyBrief.summary,
+      /*
+       * ------------------------------------------------
+       * USER-OWNED COMPANY BRIEF PROTECTION
+       * ------------------------------------------------
+       *
+       * If the user edited or pinned the brief, do not
+       * overwrite their content.
+       *
+       * Research metadata can still be refreshed.
+       * ------------------------------------------------
+       */
 
-            "company_brief.what_they_do": companyBrief.what_they_do,
+      if (!kit.company_brief.is_edited && !kit.company_brief.is_pinned) {
+        candidateCompanyBrief = {
+          summary: generatedBrief.summary.trim(),
+          what_they_do: generatedBrief.what_they_do.trim(),
+          sources:
+            generatedBrief.sources.length > 0
+              ? [...generatedBrief.sources]
+              : [...candidatePagesUsed],
 
-            "company_brief.sources":
-              companyBrief.sources.length > 0
-                ? companyBrief.sources
-                : pagesUsed,
-
-            "source.pages_used":
-              pagesUsed.length > 0 ? pagesUsed : kit.source.pages_used,
-
-            "source.researched_at": new Date().toISOString(),
-          },
-        },
-      );
+          is_edited: false,
+          is_pinned: false,
+        };
+      } else {
+        candidateCompanyBrief = {
+          summary: kit.company_brief.summary,
+          what_they_do: kit.company_brief.what_they_do,
+          sources: [...(kit.company_brief.sources ?? [])],
+          is_edited: Boolean(kit.company_brief.is_edited),
+          is_pinned: Boolean(kit.company_brief.is_pinned),
+        };
+      }
     }
 
     /*
-     * --------------------------------------------------
+     * ==================================================
      * QUESTIONS
-     * --------------------------------------------------
+     * ==================================================
      */
 
     if (section === "questions") {
@@ -474,22 +1144,39 @@ export const regenerateInterviewKit = async ({
         kit.source.company_url,
       );
 
-      let companyBrief = {
-        summary: kit.company_brief.summary,
+      /*
+       * Use current company brief as context.
+       */
 
-        what_they_do: kit.company_brief.what_they_do,
-
-        sources:
-          kit.company_brief.sources.length > 0
-            ? kit.company_brief.sources
-            : pagesUsed,
+      let workingCompanyBrief = {
+        summary: candidateCompanyBrief.summary,
+        what_they_do: candidateCompanyBrief.what_they_do,
+        sources: [...candidateCompanyBrief.sources],
       };
 
-      if (!companyBrief.summary.trim() && !companyBrief.what_they_do.trim()) {
-        companyBrief = await generateCompanyBrief(
+      /*
+       * If company brief is empty, generate a temporary one.
+       * This temporary brief is NOT saved as the company brief.
+       */
+
+      if (
+        !workingCompanyBrief.summary.trim() &&
+        !workingCompanyBrief.what_they_do.trim()
+      ) {
+        const generatedBrief = await generateCompanyBrief(
           kit.source.company,
           researchText,
+          candidatePagesUsed,
         );
+
+        workingCompanyBrief = {
+          summary: generatedBrief.summary.trim(),
+          what_they_do: generatedBrief.what_they_do.trim(),
+          sources:
+            generatedBrief.sources.length > 0
+              ? [...generatedBrief.sources]
+              : [...candidatePagesUsed],
+        };
       }
 
       /*
@@ -501,7 +1188,7 @@ export const regenerateInterviewKit = async ({
       const generatedQuestions = await generateQuestions(
         kit.role.title,
         kit.role.requirements,
-        companyBrief,
+        workingCompanyBrief,
         interviewResearch,
       );
 
@@ -521,14 +1208,15 @@ export const regenerateInterviewKit = async ({
       }
 
       /*
-       * Newly generated questions need IDs before
-       * entering the coverage pipeline.
+       * --------------------------------------------------
+       * ASSIGN TEMPORARY IDS
+       * --------------------------------------------------
        */
 
       const questionsWithIds: Question[] = sanitizedQuestions.map(
         (question): Question => ({
           ...question,
-          id: createQuestionId(),
+          id: question.id?.trim() || createQuestionId(),
           is_edited: false,
           is_pinned: false,
         }),
@@ -551,7 +1239,7 @@ export const regenerateInterviewKit = async ({
         kit.role.title,
         kit.role.requirements,
         questionsWithIds,
-        companyBrief,
+        workingCompanyBrief,
         interviewResearch,
       );
 
@@ -571,17 +1259,15 @@ export const regenerateInterviewKit = async ({
       }
 
       /*
-       * coverageResult.questions already contain IDs.
-       * Preserve them instead of creating another ID.
+       * --------------------------------------------------
+       * FINAL GENERATED QUESTIONS
+       * --------------------------------------------------
        */
 
       const generatedFinalQuestions: Question[] = coveredQuestions.map(
         (question): Question => ({
           ...question,
-          id:
-            "id" in question && typeof question.id === "string"
-              ? question.id
-              : createQuestionId(),
+          id: question.id?.trim() || createQuestionId(),
           is_edited: false,
           is_pinned: false,
         }),
@@ -590,12 +1276,12 @@ export const regenerateInterviewKit = async ({
       const existingQuestions = kit.questions ?? [];
 
       let preservedQuestions: Question[] = [];
-      let regeneratedQuestions: Question[] = generatedFinalQuestions;
+      let regeneratedQuestions = generatedFinalQuestions;
 
       /*
-       * --------------------------------------------------
-       * CATEGORY-SPECIFIC REGENERATION
-       * --------------------------------------------------
+       * ==================================================
+       * CATEGORY REGENERATION
+       * ==================================================
        */
 
       if (category?.trim()) {
@@ -607,10 +1293,11 @@ export const regenerateInterviewKit = async ({
         );
 
         /*
-         * Keep:
-         * - all questions from other categories
-         * - edited questions
-         * - pinned questions
+         * Preserve:
+         *
+         * 1. All questions outside selected category.
+         * 2. Edited questions in selected category.
+         * 3. Pinned questions in selected category.
          */
 
         preservedQuestions = existingQuestions.filter(
@@ -621,8 +1308,7 @@ export const regenerateInterviewKit = async ({
         );
 
         /*
-         * Only insert newly generated questions
-         * belonging to the requested category.
+         * Only replace the selected category.
          */
 
         regeneratedQuestions = generatedFinalQuestions.filter(
@@ -631,9 +1317,8 @@ export const regenerateInterviewKit = async ({
         );
 
         /*
-         * If AI failed to generate this category,
-         * preserve the existing category instead of
-         * deleting it.
+         * If AI does not produce this category but an
+         * existing category exists, retain the old category.
          */
 
         if (
@@ -641,13 +1326,12 @@ export const regenerateInterviewKit = async ({
           existingCategoryQuestions.length > 0
         ) {
           preservedQuestions = [...existingQuestions];
-
           regeneratedQuestions = [];
         }
 
         /*
-         * If there was no existing category and AI
-         * generated nothing for it, fail clearly.
+         * If category did not previously exist and AI
+         * produced nothing, fail safely.
          */
 
         if (
@@ -660,12 +1344,11 @@ export const regenerateInterviewKit = async ({
         }
       } else {
         /*
-         * ------------------------------------------------
+         * ==================================================
          * FULL QUESTION REGENERATION
-         * ------------------------------------------------
+         * ==================================================
          *
-         * Keep only edited/pinned questions.
-         * Replace untouched AI-generated questions.
+         * Only edited/pinned questions survive.
          */
 
         preservedQuestions = existingQuestions.filter(
@@ -675,7 +1358,7 @@ export const regenerateInterviewKit = async ({
 
       /*
        * --------------------------------------------------
-       * MERGE QUESTIONS
+       * MERGE
        * --------------------------------------------------
        */
 
@@ -690,38 +1373,11 @@ export const regenerateInterviewKit = async ({
 
       /*
        * --------------------------------------------------
-       * FINAL QUESTION VALIDATION
+       * VALIDATE QUESTIONS
        * --------------------------------------------------
        */
 
-      for (const question of finalQuestions) {
-        if (
-          !question.requirement_ids ||
-          question.requirement_ids.length === 0
-        ) {
-          throw new Error(`Question "${question.id}" has no requirement IDs.`);
-        }
-
-        const hasInvalidRequirement = question.requirement_ids.some(
-          (requirementId: string) => !validRequirementIds.has(requirementId),
-        );
-
-        if (hasInvalidRequirement) {
-          throw new Error(
-            `Question "${question.id}" contains an invalid requirement ID.`,
-          );
-        }
-
-        if (!question.prompt.trim()) {
-          throw new Error(`Question "${question.id}" has an empty prompt.`);
-        }
-
-        if (!question.answer_outline.trim()) {
-          throw new Error(
-            `Question "${question.id}" has an empty answer outline.`,
-          );
-        }
-      }
+      validateQuestions(finalQuestions, validRequirementIds);
 
       /*
        * --------------------------------------------------
@@ -745,17 +1401,8 @@ export const regenerateInterviewKit = async ({
 
       /*
        * --------------------------------------------------
-       * REBUILD SCHEDULE FROM FINAL QUESTIONS
+       * REBUILD / MERGE SCHEDULE
        * --------------------------------------------------
-       *
-       * IMPORTANT FIX:
-       *
-       * Question regeneration creates new question IDs.
-       * Therefore the previous schedule can contain stale
-       * IDs such as q1, q2, q3, q4, q5.
-       *
-       * Rebuilding the schedule here guarantees that every
-       * schedule.question_ids value belongs to finalQuestions.
        */
 
       await updateGeneration(
@@ -765,51 +1412,40 @@ export const regenerateInterviewKit = async ({
         "Rebuilding schedule for regenerated questions",
       );
 
-      const regeneratedSchedule = allocateSchedule(
+      const regeneratedScheduleRaw = allocateSchedule(
         kit.schedule.days_available,
         kit.role.requirements,
         finalQuestions,
       );
 
+      const regeneratedSchedule = mapGeneratedSchedule(regeneratedScheduleRaw);
+
+      candidateQuestions = finalQuestions;
+
+      candidateCoverage = {
+        uncovered_requirement_ids: [...finalCoverage.uncovered_requirement_ids],
+        passes: finalCoverage.passes,
+      };
+
       /*
-       * --------------------------------------------------
-       * SAVE QUESTIONS + COVERAGE + SCHEDULE AT ONCE
-       * --------------------------------------------------
+       * IMPORTANT:
        *
-       * This keeps the dependent data synchronized.
+       * Do not simply replace the entire schedule.
+       * Preserve edited/pinned days.
        */
 
-      await InterviewKit.findOneAndUpdate(
-        {
-          _id: kitId,
-          user_id: userId,
-        },
-        {
-          $set: {
-            questions: finalQuestions,
-
-            coverage: {
-              uncovered_requirement_ids:
-                finalCoverage.uncovered_requirement_ids,
-
-              passes: finalCoverage.passes,
-            },
-
-            schedule: regeneratedSchedule,
-
-            "source.pages_used":
-              pagesUsed.length > 0 ? pagesUsed : kit.source.pages_used,
-
-            "source.researched_at": new Date().toISOString(),
-          },
-        },
+      candidateSchedule = mergeSchedulesPreservingUserState(
+        kit.schedule,
+        regeneratedSchedule,
+        finalQuestions,
+        kit.role.requirements,
       );
     }
 
     /*
-     * --------------------------------------------------
+     * ==================================================
      * FLASHCARDS
-     * --------------------------------------------------
+     * ==================================================
      */
 
     if (section === "flashcards") {
@@ -830,6 +1466,8 @@ export const regenerateInterviewKit = async ({
         kit.questions,
       );
 
+      const seenContent = new Set<string>();
+
       const regeneratedFlashcards = newFlashcards
         .map<Flashcard | null>((flashcard) => {
           if (!flashcard.front?.trim() || !flashcard.back?.trim()) {
@@ -849,6 +1487,16 @@ export const regenerateInterviewKit = async ({
             return null;
           }
 
+          const contentKey =
+            `${normalizeText(flashcard.front)}|` +
+            `${normalizeText(flashcard.back)}`;
+
+          if (seenContent.has(contentKey)) {
+            return null;
+          }
+
+          seenContent.add(contentKey);
+
           return {
             ...flashcard,
             requirement_ids: validIds,
@@ -865,6 +1513,10 @@ export const regenerateInterviewKit = async ({
 
       const existingFlashcards = kit.flashcards ?? [];
 
+      /*
+       * Only edited/pinned flashcards survive.
+       */
+
       const preservedFlashcards = existingFlashcards.filter(
         (flashcard: Flashcard) => flashcard.is_edited || flashcard.is_pinned,
       );
@@ -874,23 +1526,25 @@ export const regenerateInterviewKit = async ({
         regeneratedFlashcards,
       );
 
-      await InterviewKit.findOneAndUpdate(
-        {
-          _id: kitId,
-          user_id: userId,
-        },
-        {
-          $set: {
-            flashcards: finalFlashcards,
-          },
-        },
+      validateFlashcards(finalFlashcards, validRequirementIds);
+
+      /*
+       * Preserve practice state for flashcards that
+       * still exist.
+       */
+
+      candidatePracticeFlashcards = cleanPracticeForFlashcards(
+        candidatePracticeFlashcards,
+        finalFlashcards,
       );
+
+      candidateFlashcards = finalFlashcards;
     }
 
     /*
-     * --------------------------------------------------
+     * ==================================================
      * SCHEDULE
-     * --------------------------------------------------
+     * ==================================================
      */
 
     if (section === "schedule") {
@@ -905,29 +1559,46 @@ export const regenerateInterviewKit = async ({
         "Regenerating interview preparation schedule",
       );
 
-      const schedule = allocateSchedule(
+      const regeneratedScheduleRaw = allocateSchedule(
         kit.schedule.days_available,
         kit.role.requirements,
         kit.questions,
       );
 
-      await InterviewKit.findOneAndUpdate(
-        {
-          _id: kitId,
-          user_id: userId,
-        },
-        {
-          $set: {
-            schedule,
-          },
-        },
+      const regeneratedSchedule = mapGeneratedSchedule(regeneratedScheduleRaw);
+
+      candidateSchedule = mergeSchedulesPreservingUserState(
+        kit.schedule,
+        regeneratedSchedule,
+        kit.questions,
+        kit.role.requirements,
       );
     }
 
     /*
-     * --------------------------------------------------
+     * ==================================================
+     * FINAL CLEANUP
+     * ==================================================
+     */
+
+    candidateSchedule = cleanScheduleQuestionIds(
+      candidateSchedule,
+      candidateQuestions,
+    );
+
+    /*
+     * Remove stale practice records.
+     */
+
+    candidatePracticeFlashcards = cleanPracticeForFlashcards(
+      candidatePracticeFlashcards,
+      candidateFlashcards,
+    );
+
+    /*
+     * ==================================================
      * FINAL VALIDATION
-     * --------------------------------------------------
+     * ==================================================
      */
 
     await updateGeneration(
@@ -937,72 +1608,85 @@ export const regenerateInterviewKit = async ({
       "Validating regenerated interview kit",
     );
 
-    const latestKit = await InterviewKit.findOne({
-      _id: kitId,
-      user_id: userId,
-    });
-
-    if (!latestKit) {
-      throw new Error("Interview kit disappeared during regeneration.");
-    }
-
-    const validation = validateFinalKit(
-      {
-        source: {
-          company: latestKit.source.company,
-
-          company_url: latestKit.source.company_url,
-
-          role: latestKit.source.role,
-
-          location: latestKit.source.location,
-
-          jd_chars: latestKit.source.jd_chars,
-
-          researched_at: latestKit.source.researched_at,
-
-          pages_used: latestKit.source.pages_used,
-        },
-
-        company_brief: {
-          summary: latestKit.company_brief.summary,
-
-          what_they_do: latestKit.company_brief.what_they_do,
-
-          sources: latestKit.company_brief.sources,
-        },
-
-        role: {
-          title: latestKit.role.title,
-
-          seniority: latestKit.role.seniority,
-
-          responsibilities: latestKit.role.responsibilities,
-
-          requirements: latestKit.role.requirements,
-        },
-
-        questions: latestKit.questions,
-
-        flashcards: latestKit.flashcards,
-
-        schedule: latestKit.schedule,
-
-        coverage: latestKit.coverage,
+    const candidate = {
+      source: {
+        company: kit.source.company,
+        company_url: kit.source.company_url,
+        role: kit.source.role,
+        location: kit.source.location,
+        jd_chars: kit.source.jd_chars,
+        researched_at: candidateResearchedAt,
+        pages_used: candidatePagesUsed,
       },
-      latestKit.schedule.days_available,
+
+      company_brief: candidateCompanyBrief,
+
+      role: {
+        title: kit.role.title,
+        seniority: kit.role.seniority,
+        responsibilities: [...kit.role.responsibilities],
+        requirements: kit.role.requirements,
+      },
+
+      questions: candidateQuestions,
+
+      flashcards: candidateFlashcards,
+
+      schedule: candidateSchedule,
+
+      coverage: candidateCoverage,
+    };
+
+    validateCandidateKit(candidate, kit.schedule.days_available);
+
+    /*
+     * ==================================================
+     * FINAL CONTENT SAVE
+     * ==================================================
+     */
+
+    await updateGeneration(kitId, userId, 95, "Saving validated interview kit");
+
+    const updatedKit = await InterviewKit.findOneAndUpdate(
+      {
+        _id: kitId,
+        user_id: userId,
+      },
+      {
+        $set: {
+          company_brief: candidateCompanyBrief,
+
+          questions: candidateQuestions,
+
+          flashcards: candidateFlashcards,
+
+          practice: {
+            flashcards: candidatePracticeFlashcards,
+          },
+
+          schedule: candidateSchedule,
+
+          coverage: candidateCoverage,
+
+          "source.pages_used": candidatePagesUsed,
+
+          "source.researched_at": candidateResearchedAt,
+        },
+      },
+      {
+        new: true,
+        runValidators: true,
+      },
     );
 
-    if (!validation.is_valid) {
-      throw new Error(
-        `Regenerated kit validation failed: ${validation.errors.join(" | ")}`,
-      );
+    if (!updatedKit) {
+      throw new Error("Interview kit disappeared before final save.");
     }
 
     /*
-     * --------------------------------------------------
+     * ==================================================
      * COMPLETED
-     * --------------------------------------------------
+     * ==================================================
      */
 
     await InterviewKit.findOneAndUpdate(
@@ -1013,11 +1697,8 @@ export const regenerateInterviewKit = async ({
       {
         $set: {
           "generation.status": "completed",
-
           "generation.progress": 100,
-
           "generation.current_step": `${section} regenerated successfully`,
-
           "generation.error": null,
         },
       },
@@ -1038,11 +1719,8 @@ export const regenerateInterviewKit = async ({
       {
         $set: {
           "generation.status": "failed",
-
           "generation.progress": 0,
-
           "generation.current_step": "Regeneration failed",
-
           "generation.error": errorMessage,
         },
       },

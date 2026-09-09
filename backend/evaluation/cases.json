@@ -1,0 +1,32 @@
+[
+  {
+    "id": "case-01",
+    "jd": "We are looking for a Full Stack Developer with experience in React, Node.js, Express and MongoDB. The candidate should be comfortable building REST APIs, working with databases and developing responsive web applications.",
+    "company_url": "https://www.google.com",
+    "days": 5
+  },
+  {
+    "id": "case-02",
+    "jd": "We are hiring a Frontend Developer with strong experience in React, JavaScript, HTML and CSS. The role involves building reusable UI components, integrating APIs and collaborating with backend engineers.",
+    "company_url": "https://www.microsoft.com",
+    "days": 3
+  },
+  {
+    "id": "case-03",
+    "jd": "Looking for a Backend Developer experienced in Python, FastAPI, REST APIs and PostgreSQL. Responsibilities include designing backend services, implementing authentication and writing maintainable production code.",
+    "company_url": "https://www.ibm.com",
+    "days": 7
+  },
+  {
+    "id": "case-04",
+    "jd": "We are looking for a Software Engineer who can solve programming problems, understand data structures and algorithms, write clean code and work effectively with a software development team.",
+    "company_url": "https://example.invalid",
+    "days": 2
+  },
+  {
+    "id": "case-05",
+    "jd": "Join our engineering team as a Full Stack Engineer. You will work with TypeScript, React, Node.js and SQL databases. Experience with Git, API development, debugging and system design is preferred.",
+    "company_url": "https://www.github.com",
+    "days": 1
+  }
+]

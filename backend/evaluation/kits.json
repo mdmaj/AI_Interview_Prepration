@@ -1,0 +1,51 @@
+{
+  "version": "1.0",
+  "generated_at": "2026-09-09T13:19:00.863Z",
+  "kits": [
+    {
+      "id": "case-01",
+      "status": "failed",
+      "kit": null,
+      "error": {
+        "code": "LLM_RATE_LIMITED",
+        "message": "LLM_RATE_LIMITED: Gemini API daily quota has been exhausted. Please wait for the quota to reset or use a Gemini API project/model with available quota."
+      }
+    },
+    {
+      "id": "case-02",
+      "status": "failed",
+      "kit": null,
+      "error": {
+        "code": "LLM_RATE_LIMITED",
+        "message": "LLM_RATE_LIMITED: Gemini API daily quota has been exhausted. Please wait for the quota to reset or use a Gemini API project/model with available quota."
+      }
+    },
+    {
+      "id": "case-03",
+      "status": "failed",
+      "kit": null,
+      "error": {
+        "code": "LLM_RATE_LIMITED",
+        "message": "LLM_RATE_LIMITED: Gemini API daily quota has been exhausted. Please wait for the quota to reset or use a Gemini API project/model with available quota."
+      }
+    },
+    {
+      "id": "case-04",
+      "status": "failed",
+      "kit": null,
+      "error": {
+        "code": "LLM_RATE_LIMITED",
+        "message": "LLM_RATE_LIMITED: Gemini API daily quota has been exhausted. Please wait for the quota to reset or use a Gemini API project/model with available quota."
+      }
+    },
+    {
+      "id": "case-05",
+      "status": "failed",
+      "kit": null,
+      "error": {
+        "code": "LLM_RATE_LIMITED",
+        "message": "LLM_RATE_LIMITED: Gemini API daily quota has been exhausted. Please wait for the quota to reset or use a Gemini API project/model with available quota."
+      }
+    }
+  ]
+}

@@ -1,9 +1,6 @@
 // src/services/validation/testKitValidator.ts
 
-import {
-  validateFinalKit,
-  type FinalKit,
-} from "./kitValidator.js";
+import { validateFinalKit, type FinalKit } from "./kitValidator.js";
 
 const baseKit: FinalKit = {
   source: {
@@ -104,11 +101,7 @@ const cloneKit = (): FinalKit => {
   return structuredClone(baseKit);
 };
 
-const runTest = (
-  name: string,
-  kit: FinalKit,
-  expectedValid: boolean,
-): void => {
+const runTest = (name: string, kit: FinalKit, expectedValid: boolean): void => {
   const result = validateFinalKit(kit, 2);
 
   if (result.is_valid !== expectedValid) {
@@ -128,11 +121,7 @@ const runTest = (
 // TEST 1
 // --------------------------------------------------
 
-runTest(
-  "Valid complete kit structure",
-  cloneKit(),
-  true,
-);
+runTest("Valid complete kit structure", cloneKit(), true);
 
 // --------------------------------------------------
 // TEST 2
@@ -147,11 +136,7 @@ duplicateRequirement.role.requirements.push({
   priority: "must",
 });
 
-runTest(
-  "Duplicate requirement ID rejected",
-  duplicateRequirement,
-  false,
-);
+runTest("Duplicate requirement ID rejected", duplicateRequirement, false);
 
 // --------------------------------------------------
 // TEST 3
@@ -159,9 +144,7 @@ runTest(
 
 const invalidQuestionReference = cloneKit();
 
-invalidQuestionReference.questions[0].requirement_ids = [
-  "r999",
-];
+invalidQuestionReference.questions[0].requirement_ids = ["r999"];
 
 runTest(
   "Unknown question requirement ID rejected",
@@ -184,11 +167,7 @@ duplicateQuestion.questions.push({
   difficulty: 1,
 });
 
-runTest(
-  "Duplicate question ID rejected",
-  duplicateQuestion,
-  false,
-);
+runTest("Duplicate question ID rejected", duplicateQuestion, false);
 
 // --------------------------------------------------
 // TEST 5
@@ -198,11 +177,7 @@ const invalidDifficulty = cloneKit();
 
 invalidDifficulty.questions[0].difficulty = 4 as 1 | 2 | 3;
 
-runTest(
-  "Invalid difficulty rejected",
-  invalidDifficulty,
-  false,
-);
+runTest("Invalid difficulty rejected", invalidDifficulty, false);
 
 // --------------------------------------------------
 // TEST 6
@@ -213,11 +188,7 @@ const invalidCategory = cloneKit();
 invalidCategory.questions[0].category =
   "invalid" as FinalKit["questions"][number]["category"];
 
-runTest(
-  "Invalid question category rejected",
-  invalidCategory,
-  false,
-);
+runTest("Invalid question category rejected", invalidCategory, false);
 
 // --------------------------------------------------
 // TEST 7
@@ -225,9 +196,7 @@ runTest(
 
 const invalidFlashcardReference = cloneKit();
 
-invalidFlashcardReference.flashcards[0].requirement_ids = [
-  "r999",
-];
+invalidFlashcardReference.flashcards[0].requirement_ids = ["r999"];
 
 runTest(
   "Unknown flashcard requirement ID rejected",
@@ -243,11 +212,7 @@ const wrongScheduleDays = cloneKit();
 
 wrongScheduleDays.schedule.days.pop();
 
-runTest(
-  "Wrong number of schedule days rejected",
-  wrongScheduleDays,
-  false,
-);
+runTest("Wrong number of schedule days rejected", wrongScheduleDays, false);
 
 // --------------------------------------------------
 // TEST 9
@@ -255,9 +220,7 @@ runTest(
 
 const invalidScheduleQuestion = cloneKit();
 
-invalidScheduleQuestion.schedule.days[0].question_ids = [
-  "q999",
-];
+invalidScheduleQuestion.schedule.days[0].question_ids = ["q999"];
 
 runTest(
   "Unknown schedule question ID rejected",
@@ -271,15 +234,11 @@ runTest(
 
 const uncoveredMustRequirement = cloneKit();
 
-uncoveredMustRequirement.questions =
-  uncoveredMustRequirement.questions.filter(
-    (question) => question.id !== "q2",
-  );
+uncoveredMustRequirement.questions = uncoveredMustRequirement.questions.filter(
+  (question) => question.id !== "q2",
+);
 
-uncoveredMustRequirement.coverage.uncovered_requirement_ids = [
-  "r2",
-  "r3",
-];
+uncoveredMustRequirement.coverage.uncovered_requirement_ids = ["r2", "r3"];
 
 runTest(
   "Uncovered must-have requirement rejected",
@@ -295,11 +254,7 @@ const inconsistentCoverage = cloneKit();
 
 inconsistentCoverage.coverage.uncovered_requirement_ids = [];
 
-runTest(
-  "Inconsistent coverage rejected",
-  inconsistentCoverage,
-  false,
-);
+runTest("Inconsistent coverage rejected", inconsistentCoverage, false);
 
 // --------------------------------------------------
 // TEST 12
@@ -314,11 +269,7 @@ duplicateFlashcard.flashcards.push({
   requirement_ids: ["r1"],
 });
 
-runTest(
-  "Duplicate flashcard ID rejected",
-  duplicateFlashcard,
-  false,
-);
+runTest("Duplicate flashcard ID rejected", duplicateFlashcard, false);
 
 // --------------------------------------------------
 // TEST 13
@@ -328,11 +279,7 @@ const invalidScheduleMinutes = cloneKit();
 
 invalidScheduleMinutes.schedule.days[0].minutes = 30.5;
 
-runTest(
-  "Non-integer schedule minutes rejected",
-  invalidScheduleMinutes,
-  false,
-);
+runTest("Non-integer schedule minutes rejected", invalidScheduleMinutes, false);
 
 // --------------------------------------------------
 // TEST 14
@@ -343,9 +290,7 @@ const wrongExpectedDays = cloneKit();
 const result = validateFinalKit(wrongExpectedDays, 5);
 
 if (result.is_valid) {
-  throw new Error(
-    "Test failed: Expected days mismatch should be rejected",
-  );
+  throw new Error("Test failed: Expected days mismatch should be rejected");
 }
 
 console.log("✅ Expected days mismatch rejected");

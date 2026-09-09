@@ -88,6 +88,30 @@ export interface Flashcard {
 
 /*
  * ------------------------------------------------------------
+ * Company Brief
+ * ------------------------------------------------------------
+ *
+ * is_edited:
+ * User manually changed the company brief.
+ *
+ * is_pinned:
+ * User explicitly wants the current brief preserved
+ * during company brief regeneration.
+ * ------------------------------------------------------------
+ */
+
+export interface CompanyBrief {
+  summary: string;
+  what_they_do: string;
+  sources: string[];
+
+  // Builder state
+  is_edited: boolean;
+  is_pinned: boolean;
+}
+
+/*
+ * ------------------------------------------------------------
  * Schedule Day
  * ------------------------------------------------------------
  */
@@ -97,6 +121,10 @@ export interface ScheduleDay {
   focus: string;
   question_ids: string[];
   minutes: number;
+
+  // Builder state
+  is_edited: boolean;
+  is_pinned: boolean;
 }
 
 /*
@@ -119,11 +147,7 @@ export interface IInterviewKit extends Document {
     pages_used: string[];
   };
 
-  company_brief: {
-    summary: string;
-    what_they_do: string;
-    sources: string[];
-  };
+  company_brief: CompanyBrief;
 
   role: {
     title: string;
@@ -140,8 +164,7 @@ export interface IInterviewKit extends Document {
    * User practice state.
    *
    * This is intentionally separate from flashcards because
-   * confidence/covered state belongs to the user's practice
-   * progress, not to the generated flashcard content.
+   * confidence/covered state belongs to practice, not content.
    */
   practice: Practice;
 
@@ -157,11 +180,8 @@ export interface IInterviewKit extends Document {
 
   generation: {
     status: "pending" | "generating" | "completed" | "failed";
-
     progress: number;
-
     current_step: string;
-
     error: string | null;
   };
 }
@@ -177,6 +197,7 @@ const requirementSchema = new Schema<Requirement>(
     id: {
       type: String,
       required: true,
+      trim: true,
     },
 
     text: {
@@ -213,6 +234,7 @@ const questionSchema = new Schema<Question>(
     id: {
       type: String,
       required: true,
+      trim: true,
     },
 
     requirement_ids: {
@@ -245,20 +267,6 @@ const questionSchema = new Schema<Question>(
       required: true,
     },
 
-    /*
-     * --------------------------------------------------------
-     * Builder state
-     * --------------------------------------------------------
-     *
-     * is_edited:
-     * User manually changed the question.
-     *
-     * is_pinned:
-     * User explicitly wants to preserve this question
-     * during regeneration.
-     * --------------------------------------------------------
-     */
-
     is_edited: {
       type: Boolean,
       default: false,
@@ -285,6 +293,7 @@ const flashcardSchema = new Schema<Flashcard>(
     id: {
       type: String,
       required: true,
+      trim: true,
     },
 
     front: {
@@ -305,11 +314,45 @@ const flashcardSchema = new Schema<Flashcard>(
       default: [],
     },
 
-    /*
-     * --------------------------------------------------------
-     * Builder state
-     * --------------------------------------------------------
-     */
+    is_edited: {
+      type: Boolean,
+      default: false,
+    },
+
+    is_pinned: {
+      type: Boolean,
+      default: false,
+    },
+  },
+  {
+    _id: false,
+  },
+);
+
+/*
+ * ============================================================
+ * Company Brief Schema
+ * ============================================================
+ */
+
+const companyBriefSchema = new Schema<CompanyBrief>(
+  {
+    summary: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    what_they_do: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    sources: {
+      type: [String],
+      default: [],
+    },
 
     is_edited: {
       type: Boolean,
@@ -334,17 +377,11 @@ const flashcardSchema = new Schema<Flashcard>(
 
 const practiceFlashcardSchema = new Schema<PracticeFlashcard>(
   {
-    /*
-     * ID of the flashcard from the generated flashcards array.
-     */
     flashcard_id: {
       type: String,
       required: true,
     },
 
-    /*
-     * User's confidence level while practicing.
-     */
     confidence: {
       type: String,
       enum: ["low", "medium", "high"],
@@ -352,9 +389,6 @@ const practiceFlashcardSchema = new Schema<PracticeFlashcard>(
       required: true,
     },
 
-    /*
-     * Whether the user has marked this flashcard as covered.
-     */
     is_covered: {
       type: Boolean,
       default: false,
@@ -376,6 +410,8 @@ const scheduleDaySchema = new Schema<ScheduleDay>(
     day: {
       type: Number,
       required: true,
+      min: 1,
+      max: 60,
     },
 
     focus: {
@@ -394,6 +430,16 @@ const scheduleDaySchema = new Schema<ScheduleDay>(
       type: Number,
       required: true,
       min: 0,
+    },
+
+    is_edited: {
+      type: Boolean,
+      default: false,
+    },
+
+    is_pinned: {
+      type: Boolean,
+      default: false,
     },
   },
   {
@@ -482,20 +528,14 @@ const interviewKitSchema = new Schema<IInterviewKit>(
      */
 
     company_brief: {
-      summary: {
-        type: String,
-        default: "",
-      },
-
-      what_they_do: {
-        type: String,
-        default: "",
-      },
-
-      sources: {
-        type: [String],
-        default: [],
-      },
+      type: companyBriefSchema,
+      default: () => ({
+        summary: "",
+        what_they_do: "",
+        sources: [],
+        is_edited: false,
+        is_pinned: false,
+      }),
     },
 
     /*
@@ -553,24 +593,6 @@ const interviewKitSchema = new Schema<IInterviewKit>(
     /*
      * --------------------------------------------------------
      * Practice
-     * --------------------------------------------------------
-     *
-     * Stores user-specific practice progress.
-     *
-     * Example:
-     *
-     * practice: {
-     *   flashcards: [
-     *     {
-     *       flashcard_id: "f1",
-     *       confidence: "low",
-     *       is_covered: false
-     *     }
-     *   ]
-     * }
-     *
-     * This data is kept separate from generated flashcard
-     * content so regeneration does not destroy practice progress.
      * --------------------------------------------------------
      */
 
@@ -659,9 +681,6 @@ const interviewKitSchema = new Schema<IInterviewKit>(
 /*
  * ============================================================
  * Indexes
- * ============================================================
- *
- * Makes "my kits" queries faster.
  * ============================================================
  */
 

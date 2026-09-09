@@ -1,9 +1,10 @@
 import { GoogleGenAI } from "@google/genai";
 
 const DEFAULT_MODEL = "gemini-3.7-flash";
+
 const DEFAULT_MAX_RETRIES = 2;
-const DEFAULT_INITIAL_DELAY_MS = 2000;
-const MAX_RETRY_DELAY_MS = 15000;
+const DEFAULT_INITIAL_DELAY_MS = 1500;
+const MAX_RETRY_DELAY_MS = 10000;
 
 const sleep = async (ms: number): Promise<void> => {
   await new Promise((resolve) => setTimeout(resolve, ms));
@@ -15,6 +16,7 @@ interface GeminiErrorDetails {
   retryDelaySeconds?: number;
   isDailyQuotaExceeded?: boolean;
   isRateLimited?: boolean;
+  isTemporaryServerError?: boolean;
 }
 
 const getErrorDetails = (error: unknown): GeminiErrorDetails => {
@@ -38,23 +40,56 @@ const getErrorDetails = (error: unknown): GeminiErrorDetails => {
         ? error.message
         : undefined;
 
-  const fullMessage = JSON.stringify(error).toLowerCase();
+  let serializedError = "";
 
+  try {
+    serializedError = JSON.stringify(errorObject).toLowerCase();
+  } catch {
+    serializedError = message?.toLowerCase() ?? "";
+  }
+
+  const normalizedMessage = `${serializedError} ${message ?? ""}`.toLowerCase();
+
+  /*
+   * Gemini daily quota errors are NOT retryable.
+   *
+   * Example:
+   * GenerateRequestsPerDayPerProjectPerModel-FreeTier
+   */
   const isDailyQuotaExceeded =
-    fullMessage.includes("generaterequestsperdayperprojectpermodel") ||
-    fullMessage.includes("requests per day") ||
-    fullMessage.includes("quota exhausted") ||
-    fullMessage.includes("daily quota") ||
-    fullMessage.includes("perday");
+    normalizedMessage.includes("generaterequestsperdayperprojectpermodel") ||
+    normalizedMessage.includes("requests per day") ||
+    normalizedMessage.includes("daily quota") ||
+    normalizedMessage.includes("quota exhausted") ||
+    normalizedMessage.includes("perday");
 
   const isRateLimited =
-    fullMessage.includes("rate limit") ||
-    fullMessage.includes("ratelimit") ||
-    fullMessage.includes("too many requests") ||
-    status === 429;
+    status === 429 ||
+    normalizedMessage.includes("rate limit") ||
+    normalizedMessage.includes("ratelimit") ||
+    normalizedMessage.includes("too many requests") ||
+    normalizedMessage.includes("resource_exhausted");
 
+  const isTemporaryServerError =
+    status === 500 ||
+    status === 502 ||
+    status === 503 ||
+    status === 504 ||
+    normalizedMessage.includes("temporarily unavailable") ||
+    normalizedMessage.includes("service unavailable") ||
+    normalizedMessage.includes("internal server error") ||
+    normalizedMessage.includes("overloaded") ||
+    normalizedMessage.includes("server error");
+
+  /*
+   * Gemini may return retryDelay in different formats.
+   *
+   * Examples:
+   * retryDelay: "5s"
+   * retryDelay: "2.5s"
+   */
   const retryDelayMatch =
-    fullMessage.match(/retrydelay["']?\s*:\s*["']?(\d+(?:\.\d+)?)s/i) ??
+    normalizedMessage.match(/retrydelay["']?\s*:\s*["']?(\d+(?:\.\d+)?)s/i) ??
     message?.match(/retrydelay["']?\s*:\s*["']?(\d+(?:\.\d+)?)s/i);
 
   const retryDelaySeconds = retryDelayMatch
@@ -67,43 +102,35 @@ const getErrorDetails = (error: unknown): GeminiErrorDetails => {
     retryDelaySeconds,
     isDailyQuotaExceeded,
     isRateLimited,
+    isTemporaryServerError,
   };
 };
 
 const isRetryableError = (error: unknown): boolean => {
   const details = getErrorDetails(error);
 
-  // Daily quota exhaustion cannot be solved by retrying.
+  // Daily quota cannot be fixed by retrying.
   if (details.isDailyQuotaExceeded) {
     return false;
   }
 
-  // Rate limits are retryable.
+  // Temporary rate limit can recover.
   if (details.isRateLimited) {
     return true;
   }
 
-  // Temporary server/provider failures are retryable.
-  if (
-    details.status === 500 ||
-    details.status === 502 ||
-    details.status === 503 ||
-    details.status === 504
-  ) {
+  // Temporary Gemini/provider failures can recover.
+  if (details.isTemporaryServerError) {
     return true;
   }
 
   const message = details.message?.toLowerCase() ?? "";
 
   return (
-    message.includes("temporarily unavailable") ||
-    message.includes("service unavailable") ||
-    message.includes("internal server error") ||
-    message.includes("server error") ||
-    message.includes("unavailable") ||
-    message.includes("overloaded") ||
     message.includes("timeout") ||
-    message.includes("timed out")
+    message.includes("timed out") ||
+    message.includes("connection reset") ||
+    message.includes("network error")
   );
 };
 
@@ -124,12 +151,7 @@ const formatGeminiError = (error: unknown): string => {
     );
   }
 
-  if (
-    details.status === 500 ||
-    details.status === 502 ||
-    details.status === 503 ||
-    details.status === 504
-  ) {
+  if (details.isTemporaryServerError) {
     return (
       "Gemini API is temporarily unavailable. " +
       "Please try again in a moment."
@@ -195,13 +217,14 @@ export const generateText = async (
         model,
         dailyQuotaExceeded: details.isDailyQuotaExceeded,
         rateLimited: details.isRateLimited,
+        temporaryServerError: details.isTemporaryServerError,
         retryDelaySeconds: details.retryDelaySeconds,
       });
 
       // ---------------------------------------------------------
       // 1. Daily quota exhausted
       // ---------------------------------------------------------
-      // Retrying won't help, so stop immediately.
+      // NEVER retry this.
       if (details.isDailyQuotaExceeded) {
         break;
       }
@@ -214,7 +237,7 @@ export const generateText = async (
       }
 
       // ---------------------------------------------------------
-      // 3. Final attempt already failed
+      // 3. No retries remaining
       // ---------------------------------------------------------
       if (attempt > maxRetries) {
         break;
@@ -232,22 +255,40 @@ export const generateText = async (
 
       const retryDelay = Math.min(providerDelay, MAX_RETRY_DELAY_MS);
 
-      // Small jitter to avoid synchronized retries.
-      const jitter = Math.floor(Math.random() * 500);
+      // Small jitter.
+      const jitter = Math.floor(Math.random() * 300);
 
       const totalDelay = retryDelay + jitter;
 
       console.log(
-        `Gemini request failed. ` +
-          `Retrying ${attempt}/${maxRetries} ` +
-          `after ${totalDelay}ms...`,
+        `Gemini request failed. ` + `Retrying after ${totalDelay}ms...`,
       );
 
       await sleep(totalDelay);
     }
   }
 
-  throw new Error(
-    `Failed to generate response from Gemini: ${formatGeminiError(lastError)}`,
-  );
+  const details = getErrorDetails(lastError);
+
+  /*
+   * Add machine-readable prefixes.
+   *
+   * The evaluator can now classify errors reliably without
+   * depending on Gemini's exact raw error message.
+   */
+  if (details.isDailyQuotaExceeded) {
+    throw new Error(`LLM_RATE_LIMITED: ${formatGeminiError(lastError)}`);
+  }
+
+  if (details.isRateLimited) {
+    throw new Error(`LLM_RATE_LIMITED: ${formatGeminiError(lastError)}`);
+  }
+
+  if (details.isTemporaryServerError) {
+    throw new Error(
+      `LLM_PROVIDER_UNAVAILABLE: ${formatGeminiError(lastError)}`,
+    );
+  }
+
+  throw new Error(`LLM_GENERATION_FAILED: ${formatGeminiError(lastError)}`);
 };
