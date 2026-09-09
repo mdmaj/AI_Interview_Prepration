@@ -3,10 +3,7 @@ import bcrypt from "bcryptjs";
 import User from "../models/User.js";
 import jwt from "jsonwebtoken";
 
-export const register = async (
-  req: Request,
-  res: Response
-): Promise<void> => {
+export const register = async (req: Request, res: Response): Promise<void> => {
   try {
     const { name, email, password } = req.body;
 
@@ -66,7 +63,7 @@ export const register = async (
       jwtSecret,
       {
         expiresIn: "7d",
-      }
+      },
     );
 
     // Send response
@@ -90,11 +87,7 @@ export const register = async (
   }
 };
 
-
-export const login = async (
-  req: Request,
-  res: Response
-): Promise<void> => {
+export const login = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password } = req.body;
 
@@ -116,10 +109,7 @@ export const login = async (
       return;
     }
 
-    const isPasswordValid = await bcrypt.compare(
-      password,
-      user.password
-    );
+    const isPasswordValid = await bcrypt.compare(password, user.password);
 
     if (!isPasswordValid) {
       res.status(401).json({
@@ -146,7 +136,7 @@ export const login = async (
       jwtSecret,
       {
         expiresIn: "7d",
-      }
+      },
     );
 
     res.status(200).json({
