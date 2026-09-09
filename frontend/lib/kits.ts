@@ -21,6 +21,35 @@ export interface CreateKitResponse {
   kit: InterviewKit;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Practice Types                                                             */
+/* -------------------------------------------------------------------------- */
+
+export type PracticeConfidence = "low" | "medium" | "high";
+
+export interface PracticeFlashcard {
+  flashcard_id: string;
+  confidence: PracticeConfidence;
+  is_covered: boolean;
+}
+
+export interface Practice {
+  flashcards: PracticeFlashcard[];
+}
+
+export interface GetPracticeResponse {
+  practice: Practice;
+}
+
+export interface UpdateFlashcardPracticeResponse {
+  message: string;
+  practice: Practice;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Kit APIs                                                                   */
+/* -------------------------------------------------------------------------- */
+
 export async function getMyKits(token: string): Promise<GetMyKitsResponse> {
   return apiRequest<GetMyKitsResponse>("/kits", {
     method: "GET",
@@ -72,11 +101,49 @@ export async function startKitGeneration(
   id: string,
   token: string,
 ): Promise<GetKitResponse> {
-  return apiRequest<GetKitResponse>(
-    `/kits/${id}/generate`,
+  return apiRequest<GetKitResponse>(`/kits/${id}/generate`, {
+    method: "POST",
+    token,
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/* Practice APIs                                                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Get saved practice progress for an interview kit.
+ */
+export async function getPracticeProgress(
+  kitId: string,
+  token: string,
+): Promise<GetPracticeResponse> {
+  return apiRequest<GetPracticeResponse>(`/kits/${kitId}/practice`, {
+    method: "GET",
+    token,
+  });
+}
+
+/**
+ * Update confidence / covered status for a single flashcard.
+ *
+ * Both fields are optional so we can update either one independently.
+ */
+export async function updateFlashcardPractice(
+  kitId: string,
+  flashcardId: string,
+  data: {
+    confidence?: PracticeConfidence;
+    is_covered?: boolean;
+  },
+  token: string,
+): Promise<UpdateFlashcardPracticeResponse> {
+  return apiRequest<UpdateFlashcardPracticeResponse>(
+    `/kits/${kitId}/practice/flashcard/${flashcardId}`,
     {
-      method: "POST",
+      method: "PATCH",
       token,
+      body: data,
     },
   );
 }

@@ -21,6 +21,24 @@ export type QuestionDifficulty = 1 | 2 | 3;
 
 /*
  * ------------------------------------------------------------
+ * Practice
+ * ------------------------------------------------------------
+ */
+
+export type PracticeConfidence = "low" | "medium" | "high";
+
+export interface PracticeFlashcard {
+  flashcard_id: string;
+  confidence: PracticeConfidence;
+  is_covered: boolean;
+}
+
+export interface Practice {
+  flashcards: PracticeFlashcard[];
+}
+
+/*
+ * ------------------------------------------------------------
  * Requirement
  * ------------------------------------------------------------
  */
@@ -117,6 +135,15 @@ export interface IInterviewKit extends Document {
   questions: Question[];
 
   flashcards: Flashcard[];
+
+  /*
+   * User practice state.
+   *
+   * This is intentionally separate from flashcards because
+   * confidence/covered state belongs to the user's practice
+   * progress, not to the generated flashcard content.
+   */
+  practice: Practice;
 
   schedule: {
     days_available: number;
@@ -290,6 +317,45 @@ const flashcardSchema = new Schema<Flashcard>(
     },
 
     is_pinned: {
+      type: Boolean,
+      default: false,
+    },
+  },
+  {
+    _id: false,
+  },
+);
+
+/*
+ * ============================================================
+ * Practice Flashcard Schema
+ * ============================================================
+ */
+
+const practiceFlashcardSchema = new Schema<PracticeFlashcard>(
+  {
+    /*
+     * ID of the flashcard from the generated flashcards array.
+     */
+    flashcard_id: {
+      type: String,
+      required: true,
+    },
+
+    /*
+     * User's confidence level while practicing.
+     */
+    confidence: {
+      type: String,
+      enum: ["low", "medium", "high"],
+      default: "low",
+      required: true,
+    },
+
+    /*
+     * Whether the user has marked this flashcard as covered.
+     */
+    is_covered: {
       type: Boolean,
       default: false,
     },
@@ -482,6 +548,37 @@ const interviewKitSchema = new Schema<IInterviewKit>(
     flashcards: {
       type: [flashcardSchema],
       default: [],
+    },
+
+    /*
+     * --------------------------------------------------------
+     * Practice
+     * --------------------------------------------------------
+     *
+     * Stores user-specific practice progress.
+     *
+     * Example:
+     *
+     * practice: {
+     *   flashcards: [
+     *     {
+     *       flashcard_id: "f1",
+     *       confidence: "low",
+     *       is_covered: false
+     *     }
+     *   ]
+     * }
+     *
+     * This data is kept separate from generated flashcard
+     * content so regeneration does not destroy practice progress.
+     * --------------------------------------------------------
+     */
+
+    practice: {
+      flashcards: {
+        type: [practiceFlashcardSchema],
+        default: [],
+      },
     },
 
     /*

@@ -1,5 +1,5 @@
 import { Response } from "express";
-import InterviewKit from "../models/InterviewKit.js";
+import InterviewKit, { type Flashcard } from "../models/InterviewKit.js";
 import { AuthRequest } from "../middleware/authMiddleware.js";
 import { generateInterviewKit } from "../services/pipeline/generateInterviewKit.js";
 import {
@@ -478,6 +478,152 @@ export const regenerateKitSection = async (
     res.status(500).json({
       success: false,
       message: "Failed to start kit regeneration",
+    });
+  }
+};
+
+export const getPracticeProgress = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
+  try {
+    if (!req.userId) {
+      res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+      return;
+    }
+
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+    const kit = await InterviewKit.findOne({
+      _id: id,
+      user_id: req.userId,
+    });
+
+    if (!kit) {
+      res.status(404).json({
+        success: false,
+        message: "Interview kit not found",
+      });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      practice: kit.practice,
+    });
+  } catch (error) {
+    console.error("Get practice progress error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch practice progress",
+    });
+  }
+};
+
+export const updateFlashcardPractice = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
+  try {
+    if (!req.userId) {
+      res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+      return;
+    }
+
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const flashcardId = Array.isArray(req.params.flashcardId)
+      ? req.params.flashcardId[0]
+      : req.params.flashcardId;
+
+    const { confidence, is_covered } = req.body;
+
+    const validConfidence = ["low", "medium", "high"];
+
+    if (confidence !== undefined && !validConfidence.includes(confidence)) {
+      res.status(400).json({
+        success: false,
+        message: "confidence must be low, medium, or high",
+      });
+      return;
+    }
+
+    if (is_covered !== undefined && typeof is_covered !== "boolean") {
+      res.status(400).json({
+        success: false,
+        message: "is_covered must be a boolean",
+      });
+      return;
+    }
+
+    const kit = await InterviewKit.findOne({
+      _id: id,
+      user_id: req.userId,
+    });
+
+    if (!kit) {
+      res.status(404).json({
+        success: false,
+        message: "Interview kit not found",
+      });
+      return;
+    }
+
+    const flashcardExists = kit.flashcards.some(
+      (flashcard: Flashcard) => flashcard.id === flashcardId,
+    );
+
+    if (!flashcardExists) {
+      res.status(404).json({
+        success: false,
+        message: "Flashcard not found",
+      });
+      return;
+    }
+
+    const existingPractice = kit.practice.flashcards.find(
+      (item: {
+        flashcard_id: string;
+        confidence: "low" | "medium" | "high";
+        is_covered: boolean;
+      }) => item.flashcard_id === flashcardId,
+    );
+
+    if (existingPractice) {
+      if (confidence !== undefined) {
+        existingPractice.confidence = confidence;
+      }
+
+      if (is_covered !== undefined) {
+        existingPractice.is_covered = is_covered;
+      }
+    } else {
+      kit.practice.flashcards.push({
+        flashcard_id: flashcardId,
+        confidence: confidence ?? "low",
+        is_covered: is_covered ?? false,
+      });
+    }
+
+    await kit.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Flashcard practice progress updated",
+      practice: kit.practice,
+    });
+  } catch (error) {
+    console.error("Update flashcard practice error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to update flashcard practice progress",
     });
   }
 };
