@@ -8,15 +8,14 @@ export interface Requirement {
 export interface Question {
   id: string;
   requirement_ids: string[];
-  category:
-    | "technical"
-    | "behavioral"
-    | "system_design"
-    | "coding"
-    | "other";
+  category: "technical" | "behavioral" | "system_design" | "coding" | "other";
   prompt: string;
   answer_outline: string;
   difficulty: 1 | 2 | 3;
+
+  // Builder state
+  is_edited?: boolean;
+  is_pinned?: boolean;
 }
 
 export interface Flashcard {
@@ -24,6 +23,20 @@ export interface Flashcard {
   front: string;
   back: string;
   requirement_ids: string[];
+
+  // Builder state
+  is_edited?: boolean;
+  is_pinned?: boolean;
+}
+
+export interface PracticeFlashcard {
+  flashcard_id: string;
+  confidence: "low" | "medium" | "high";
+  is_covered: boolean;
+}
+
+export interface Practice {
+  flashcards: PracticeFlashcard[];
 }
 
 export interface ScheduleDay {
@@ -31,23 +44,6 @@ export interface ScheduleDay {
   focus: string;
   question_ids: string[];
   minutes: number;
-}
-
-export interface Schedule {
-  days_available: number;
-  days: ScheduleDay[];
-}
-
-export interface Coverage {
-  uncovered_requirement_ids: string[];
-  passes: number;
-}
-
-export interface GenerationStatus {
-  status: "pending" | "generating" | "completed" | "failed";
-  progress: number;
-  current_step: string;
-  error: string | null;
 }
 
 export interface CompanyBrief {
@@ -63,20 +59,21 @@ export interface Role {
   requirements: Requirement[];
 }
 
-export interface KitSource {
-  company: string;
-  company_url: string;
-  role: string;
-  location: string;
-  jd_chars: number;
-  researched_at: string;
-  pages_used: string[];
-}
-
 export interface InterviewKit {
   _id: string;
 
-  source: KitSource;
+  source: {
+    company: string;
+    company_url: string;
+    role: string;
+    location: string;
+    jd_chars: number;
+    researched_at: string;
+    pages_used: string[];
+
+    // Optional because backend/API may expose it
+    jd?: string;
+  };
 
   company_brief: CompanyBrief;
 
@@ -86,9 +83,25 @@ export interface InterviewKit {
 
   flashcards: Flashcard[];
 
-  schedule: Schedule;
+  practice?: Practice;
 
-  coverage: Coverage;
+  schedule: {
+    days_available: number;
+    days: ScheduleDay[];
+  };
 
-  generation?: GenerationStatus;
+  coverage: {
+    uncovered_requirement_ids: string[];
+    passes: number;
+  };
+
+  generation: {
+    status: "idle" | "generating" | "completed" | "failed";
+    progress: number;
+    current_step: string;
+    error: string | null;
+  };
+
+  createdAt?: string;
+  updatedAt?: string;
 }

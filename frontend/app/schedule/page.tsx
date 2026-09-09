@@ -11,11 +11,16 @@ import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import MobileNav from "@/components/layout/MobileNav";
 
-interface ScheduleDay {
+interface ScheduleDayData {
   day: number;
   focus: string;
   question_ids: string[];
   minutes: number;
+}
+
+interface ScheduleQuestion {
+  id: string;
+  prompt: string;
 }
 
 export default function SchedulePage() {
@@ -113,7 +118,7 @@ export default function SchedulePage() {
       />
 
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        {/* Header */}
+        {/* Page Header */}
         <div className="mb-8">
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
             Preparation Schedule
@@ -137,7 +142,7 @@ export default function SchedulePage() {
 
             <button
               type="button"
-              onClick={loadSchedules}
+              onClick={() => void loadSchedules()}
               className="shrink-0 rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100"
             >
               Retry
@@ -200,6 +205,13 @@ export default function SchedulePage() {
             {kits.map((kit) => {
               const schedule = kit.schedule?.days ?? [];
 
+              const questions: ScheduleQuestion[] = (kit.questions ?? []).map(
+                (question) => ({
+                  id: question.id,
+                  prompt: question.prompt,
+                }),
+              );
+
               return (
                 <section
                   key={kit._id}
@@ -254,6 +266,7 @@ export default function SchedulePage() {
                         <ScheduleDay
                           key={`${kit._id}-day-${day.day}`}
                           day={day}
+                          questions={questions}
                         />
                       ))}
                     </div>
@@ -273,7 +286,17 @@ export default function SchedulePage() {
   );
 }
 
-function ScheduleDay({ day }: { day: ScheduleDay }) {
+/* =========================================================
+   Schedule Day
+   ========================================================= */
+
+function ScheduleDay({
+  day,
+  questions,
+}: {
+  day: ScheduleDayData;
+  questions: ScheduleQuestion[];
+}) {
   return (
     <div className="p-5 sm:p-6">
       <div className="flex gap-4">
@@ -282,6 +305,7 @@ function ScheduleDay({ day }: { day: ScheduleDay }) {
           {day.day}
         </div>
 
+        {/* Day Content */}
         <div className="min-w-0 flex-1">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
@@ -305,6 +329,7 @@ function ScheduleDay({ day }: { day: ScheduleDay }) {
             </div>
           </div>
 
+          {/* Progress */}
           <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
             <div
               className="h-full rounded-full bg-indigo-500"
@@ -316,11 +341,75 @@ function ScheduleDay({ day }: { day: ScheduleDay }) {
               }}
             />
           </div>
+
+          {/* Questions */}
+          {day.question_ids?.length > 0 && (
+            <div className="mt-5">
+              <div className="mb-3 flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Questions
+                </p>
+
+                <span className="text-xs text-slate-400">
+                  {day.question_ids.length} assigned
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                {day.question_ids.map((questionId, index) => {
+                  const question = questions.find(
+                    (item) => item.id === questionId,
+                  );
+
+                  return (
+                    <div
+                      key={questionId}
+                      className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 transition-colors hover:border-indigo-200 hover:bg-indigo-50/40"
+                    >
+                      <div className="flex items-start gap-3">
+                        {/* Question Number */}
+                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-indigo-100 text-xs font-bold text-indigo-700">
+                          {index + 1}
+                        </div>
+
+                        {/* Question Text */}
+                        <div className="min-w-0 flex-1">
+                          {question ? (
+                            <p className="text-sm leading-6 text-slate-700">
+                              {question.prompt}
+                            </p>
+                          ) : (
+                            <p className="text-sm leading-6 text-slate-500">
+                              This question is no longer available in the
+                              current kit.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* No Questions */}
+          {(!day.question_ids || day.question_ids.length === 0) && (
+            <div className="mt-5 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3">
+              <p className="text-sm text-slate-500">
+                No questions assigned for this day.
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 }
+
+/* =========================================================
+   Summary Card
+   ========================================================= */
 
 function SummaryCard({
   label,
@@ -348,6 +437,10 @@ function SummaryCard({
   );
 }
 
+/* =========================================================
+   Format Minutes
+   ========================================================= */
+
 function formatMinutes(minutes: number) {
   if (minutes < 60) {
     return `${minutes} min`;
@@ -362,6 +455,10 @@ function formatMinutes(minutes: number) {
 
   return `${hours}h ${remainingMinutes}m`;
 }
+
+/* =========================================================
+   Icons
+   ========================================================= */
 
 function CalendarIcon() {
   return (

@@ -19,7 +19,21 @@ import QuestionCard from "@/components/kits/QuestionCard";
 import Flashcard from "@/components/kits/Flashcard";
 import ScheduleDay from "@/components/kits/ScheduleDay";
 
-import type { InterviewKit, Question } from "@/types/kit";
+import type {
+  InterviewKit,
+  Question,
+  Flashcard as FlashcardType,
+} from "@/types/kit";
+
+type RegenerateSection =
+  | "company_brief"
+  | "questions"
+  | "technical"
+  | "behavioral"
+  | "system_design"
+  | "coding"
+  | "flashcards"
+  | "schedule";
 
 export default function KitDetailPage() {
   const params = useParams();
@@ -33,18 +47,32 @@ export default function KitDetailPage() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [error, setError] = useState("");
 
+  // Regeneration state
+  const [regeneratingSection, setRegeneratingSection] =
+    useState<RegenerateSection | null>(null);
+
   // Question builder state
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
-
   const [isQuestionModalOpen, setIsQuestionModalOpen] = useState(false);
-
   const [isAddingQuestion, setIsAddingQuestion] = useState(false);
-
   const [questionSaving, setQuestionSaving] = useState(false);
-
   const [questionSaveError, setQuestionSaveError] = useState("");
-
   const [questionSaveSuccess, setQuestionSaveSuccess] = useState("");
+
+  // Flashcard builder state
+  const [editingFlashcard, setEditingFlashcard] =
+    useState<FlashcardType | null>(null);
+  const [isFlashcardModalOpen, setIsFlashcardModalOpen] = useState(false);
+  const [isAddingFlashcard, setIsAddingFlashcard] = useState(false);
+  const [flashcardSaving, setFlashcardSaving] = useState(false);
+  const [flashcardSaveError, setFlashcardSaveError] = useState("");
+  const [flashcardSaveSuccess, setFlashcardSaveSuccess] = useState("");
+
+  const [flashcardForm, setFlashcardForm] = useState({
+    front: "",
+    back: "",
+    requirement_ids: [] as string[],
+  });
 
   const [questionForm, setQuestionForm] = useState({
     prompt: "",
@@ -54,6 +82,9 @@ export default function KitDetailPage() {
     requirement_ids: [] as string[],
   });
 
+  /*
+   * Fetch the current kit.
+   */
   const fetchKit = useCallback(async () => {
     try {
       const token = getToken();
@@ -64,19 +95,26 @@ export default function KitDetailPage() {
       }
 
       const response = await getKit(kitId, token);
+      const fetchedKit = response.kit;
 
-      setKit(response.kit);
+      setKit(fetchedKit);
 
-      if (response.kit.generation?.status === "generating") {
-        setGenerating(true);
-      } else {
-        setGenerating(false);
+      const isCurrentlyGenerating =
+        fetchedKit.generation?.status === "generating";
+
+      setGenerating(isCurrentlyGenerating);
+
+      if (!isCurrentlyGenerating) {
+        setRegeneratingSection(null);
       }
 
       setError("");
     } catch (err) {
       console.error("Failed to fetch kit:", err);
-      setError("Failed to load interview kit.");
+
+      setError(
+        err instanceof Error ? err.message : "Failed to load interview kit.",
+      );
     } finally {
       setLoading(false);
     }
@@ -91,22 +129,69 @@ export default function KitDetailPage() {
   }, [fetchKit]);
 
   /*
-   * Poll backend while kit generation is running.
+   * Poll backend while generation is running.
    */
   useEffect(() => {
     if (!kit || kit.generation?.status !== "generating") {
       return;
     }
 
-    const interval = setInterval(() => {
-      fetchKit();
+    const intervalId = window.setInterval(() => {
+      void fetchKit();
     }, 2000);
 
     return () => {
-      clearInterval(interval);
+      window.clearInterval(intervalId);
     };
   }, [kit, fetchKit]);
 
+  /*
+   * Allow Escape to close modals.
+   */
+  useEffect(() => {
+    if (
+      (!isQuestionModalOpen && !isFlashcardModalOpen) ||
+      questionSaving ||
+      flashcardSaving
+    ) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+
+      if (questionSaving || flashcardSaving) {
+        return;
+      }
+
+      setIsQuestionModalOpen(false);
+      setEditingQuestion(null);
+      setIsAddingQuestion(false);
+      setQuestionSaveError("");
+
+      setIsFlashcardModalOpen(false);
+      setEditingFlashcard(null);
+      setIsAddingFlashcard(false);
+      setFlashcardSaveError("");
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [
+    isQuestionModalOpen,
+    isFlashcardModalOpen,
+    questionSaving,
+    flashcardSaving,
+  ]);
+
+  /*
+   * Start / retry full kit generation.
+   */
   const handleGenerate = async () => {
     try {
       const token = getToken();
@@ -126,7 +211,76 @@ export default function KitDetailPage() {
       console.error("Failed to start generation:", err);
 
       setGenerating(false);
-      setError("Failed to start kit generation.");
+
+      setError(
+        err instanceof Error ? err.message : "Failed to start kit generation.",
+      );
+    }
+  };
+
+  /*
+   * Regenerate a specific section.
+   */
+  const handleRegenerateSection = async (section: RegenerateSection) => {
+    if (!kit || kit.generation?.status === "generating") {
+      return;
+    }
+
+    const token = getToken();
+
+    if (!token) {
+      router.push("/login");
+      return;
+    }
+
+    const sectionLabels: Record<RegenerateSection, string> = {
+      company_brief: "company brief",
+      questions: "all questions",
+      technical: "technical questions",
+      behavioral: "behavioral questions",
+      system_design: "system design questions",
+      coding: "coding questions",
+      flashcards: "flashcards",
+      schedule: "schedule",
+    };
+
+    const confirmed = window.confirm(
+      `Regenerate ${sectionLabels[section]}?\n\nEdited and pinned content will be preserved where supported.`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setError("");
+      setRegeneratingSection(section);
+      setGenerating(true);
+
+      const response = await apiRequest<{
+        success: boolean;
+        message: string;
+        kit: InterviewKit;
+      }>(`/kits/${kitId}/regenerate`, {
+        method: "POST",
+        token,
+        body: {
+          section,
+        },
+      });
+
+      setKit(response.kit);
+    } catch (err) {
+      console.error("Failed to regenerate section:", err);
+
+      setGenerating(false);
+      setRegeneratingSection(null);
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to start section regeneration.",
+      );
     }
   };
 
@@ -134,6 +288,10 @@ export default function KitDetailPage() {
    * Open question editor.
    */
   const handleEditQuestion = (question: Question) => {
+    if (kit?.generation?.status === "generating") {
+      return;
+    }
+
     setEditingQuestion(question);
     setIsAddingQuestion(false);
 
@@ -154,6 +312,10 @@ export default function KitDetailPage() {
    * Open add question form.
    */
   const handleAddQuestion = () => {
+    if (kit?.generation?.status === "generating") {
+      return;
+    }
+
     setEditingQuestion(null);
     setIsAddingQuestion(true);
 
@@ -182,10 +344,11 @@ export default function KitDetailPage() {
     setEditingQuestion(null);
     setIsAddingQuestion(false);
     setQuestionSaveError("");
+    setQuestionSaveSuccess("");
   };
 
   /*
-   * Toggle requirement ID for a question.
+   * Toggle requirement mapping for question.
    */
   const handleRequirementToggle = (requirementId: string) => {
     setQuestionForm((current) => {
@@ -201,7 +364,7 @@ export default function KitDetailPage() {
   };
 
   /*
-   * Save question changes through existing PUT /kits/:id endpoint.
+   * Save question changes.
    */
   const handleSaveQuestion = async () => {
     if (!kit) {
@@ -228,6 +391,26 @@ export default function KitDetailPage() {
       return;
     }
 
+    if (questionForm.requirement_ids.length === 0) {
+      setQuestionSaveError("Select at least one related job requirement.");
+      return;
+    }
+
+    const validRequirementIds = new Set(
+      kit.role?.requirements?.map((requirement) => requirement.id) ?? [],
+    );
+
+    const hasInvalidRequirement = questionForm.requirement_ids.some(
+      (requirementId) => !validRequirementIds.has(requirementId),
+    );
+
+    if (hasInvalidRequirement) {
+      setQuestionSaveError(
+        "One or more selected requirements are no longer valid.",
+      );
+      return;
+    }
+
     setQuestionSaving(true);
     setQuestionSaveError("");
     setQuestionSaveSuccess("");
@@ -243,6 +426,8 @@ export default function KitDetailPage() {
           prompt,
           answer_outline: answerOutline,
           difficulty: questionForm.difficulty,
+          is_edited: false,
+          is_pinned: false,
         };
 
         updatedQuestions = [...kit.questions, newQuestion];
@@ -259,8 +444,10 @@ export default function KitDetailPage() {
                 answer_outline: answerOutline,
                 category: questionForm.category,
                 difficulty: questionForm.difficulty,
-                // Preserve/update requirement IDs explicitly.
                 requirement_ids: [...questionForm.requirement_ids],
+
+                // Mark as manually edited.
+                is_edited: true,
               }
             : question,
         );
@@ -285,7 +472,7 @@ export default function KitDetailPage() {
           : "Question updated successfully.",
       );
 
-      setTimeout(() => {
+      window.setTimeout(() => {
         setIsQuestionModalOpen(false);
         setEditingQuestion(null);
         setIsAddingQuestion(false);
@@ -306,7 +493,7 @@ export default function KitDetailPage() {
    * Delete question.
    */
   const handleDeleteQuestion = async (questionId: string) => {
-    if (!kit) {
+    if (!kit || kit.generation?.status === "generating") {
       return;
     }
 
@@ -359,6 +546,438 @@ export default function KitDetailPage() {
     }
   };
 
+  /*
+   * Pin / unpin question.
+   */
+  const handleToggleQuestionPin = async (questionId: string) => {
+    if (!kit || kit.generation?.status === "generating") {
+      return;
+    }
+
+    const token = getToken();
+
+    if (!token) {
+      router.push("/login");
+      return;
+    }
+
+    const updatedQuestions = kit.questions.map((question) =>
+      question.id === questionId
+        ? {
+            ...question,
+            is_pinned: !question.is_pinned,
+          }
+        : question,
+    );
+
+    try {
+      setError("");
+
+      const response = await apiRequest<{
+        message: string;
+        kit: InterviewKit;
+      }>(`/kits/${kitId}`, {
+        method: "PUT",
+        token,
+        body: {
+          questions: updatedQuestions,
+        },
+      });
+
+      setKit(response.kit);
+    } catch (err) {
+      console.error("Failed to toggle question pin:", err);
+
+      setError(
+        err instanceof Error ? err.message : "Failed to update question pin.",
+      );
+    }
+  };
+
+  /*
+   * Move question up.
+   */
+  const handleMoveQuestionUp = async (questionId: string) => {
+    if (!kit || kit.generation?.status === "generating") {
+      return;
+    }
+
+    const currentIndex = kit.questions.findIndex(
+      (question) => question.id === questionId,
+    );
+
+    if (currentIndex <= 0) {
+      return;
+    }
+
+    const updatedQuestions = [...kit.questions];
+
+    [updatedQuestions[currentIndex - 1], updatedQuestions[currentIndex]] = [
+      updatedQuestions[currentIndex],
+      updatedQuestions[currentIndex - 1],
+    ];
+
+    await persistQuestionOrder(updatedQuestions);
+  };
+
+  /*
+   * Move question down.
+   */
+  const handleMoveQuestionDown = async (questionId: string) => {
+    if (!kit || kit.generation?.status === "generating") {
+      return;
+    }
+
+    const currentIndex = kit.questions.findIndex(
+      (question) => question.id === questionId,
+    );
+
+    if (currentIndex === -1 || currentIndex >= kit.questions.length - 1) {
+      return;
+    }
+
+    const updatedQuestions = [...kit.questions];
+
+    [updatedQuestions[currentIndex], updatedQuestions[currentIndex + 1]] = [
+      updatedQuestions[currentIndex + 1],
+      updatedQuestions[currentIndex],
+    ];
+
+    await persistQuestionOrder(updatedQuestions);
+  };
+
+  /*
+   * Persist question order.
+   */
+  const persistQuestionOrder = async (updatedQuestions: Question[]) => {
+    const token = getToken();
+
+    if (!token) {
+      router.push("/login");
+      return;
+    }
+
+    try {
+      setError("");
+
+      const response = await apiRequest<{
+        message: string;
+        kit: InterviewKit;
+      }>(`/kits/${kitId}`, {
+        method: "PUT",
+        token,
+        body: {
+          questions: updatedQuestions,
+        },
+      });
+
+      setKit(response.kit);
+    } catch (err) {
+      console.error("Failed to reorder questions:", err);
+
+      setError(
+        err instanceof Error ? err.message : "Failed to reorder questions.",
+      );
+    }
+  };
+
+  /*
+   * Open flashcard editor.
+   */
+  const handleEditFlashcard = (flashcard: FlashcardType) => {
+    if (kit?.generation?.status === "generating") {
+      return;
+    }
+
+    setEditingFlashcard(flashcard);
+    setIsAddingFlashcard(false);
+
+    setFlashcardForm({
+      front: flashcard.front,
+      back: flashcard.back,
+      requirement_ids: [...flashcard.requirement_ids],
+    });
+
+    setFlashcardSaveError("");
+    setFlashcardSaveSuccess("");
+    setIsFlashcardModalOpen(true);
+  };
+
+  /*
+   * Open add flashcard form.
+   */
+  const handleAddFlashcard = () => {
+    if (kit?.generation?.status === "generating") {
+      return;
+    }
+
+    setEditingFlashcard(null);
+    setIsAddingFlashcard(true);
+
+    setFlashcardForm({
+      front: "",
+      back: "",
+      requirement_ids: [],
+    });
+
+    setFlashcardSaveError("");
+    setFlashcardSaveSuccess("");
+    setIsFlashcardModalOpen(true);
+  };
+
+  /*
+   * Close flashcard modal.
+   */
+  const handleCloseFlashcardModal = () => {
+    if (flashcardSaving) {
+      return;
+    }
+
+    setIsFlashcardModalOpen(false);
+    setEditingFlashcard(null);
+    setIsAddingFlashcard(false);
+    setFlashcardSaveError("");
+    setFlashcardSaveSuccess("");
+  };
+
+  /*
+   * Toggle flashcard requirement.
+   */
+  const handleFlashcardRequirementToggle = (requirementId: string) => {
+    setFlashcardForm((current) => {
+      const exists = current.requirement_ids.includes(requirementId);
+
+      return {
+        ...current,
+        requirement_ids: exists
+          ? current.requirement_ids.filter((id) => id !== requirementId)
+          : [...current.requirement_ids, requirementId],
+      };
+    });
+  };
+
+  /*
+   * Save flashcard.
+   */
+  const handleSaveFlashcard = async () => {
+    if (!kit) {
+      return;
+    }
+
+    const token = getToken();
+
+    if (!token) {
+      router.push("/login");
+      return;
+    }
+
+    const front = flashcardForm.front.trim();
+    const back = flashcardForm.back.trim();
+
+    if (!front) {
+      setFlashcardSaveError("Flashcard front is required.");
+      return;
+    }
+
+    if (!back) {
+      setFlashcardSaveError("Flashcard answer is required.");
+      return;
+    }
+
+    if (flashcardForm.requirement_ids.length === 0) {
+      setFlashcardSaveError("Select at least one related job requirement.");
+      return;
+    }
+
+    const validRequirementIds = new Set(
+      kit.role?.requirements?.map((requirement) => requirement.id) ?? [],
+    );
+
+    const hasInvalidRequirement = flashcardForm.requirement_ids.some(
+      (requirementId) => !validRequirementIds.has(requirementId),
+    );
+
+    if (hasInvalidRequirement) {
+      setFlashcardSaveError(
+        "One or more selected requirements are no longer valid.",
+      );
+      return;
+    }
+
+    setFlashcardSaving(true);
+    setFlashcardSaveError("");
+    setFlashcardSaveSuccess("");
+
+    try {
+      let updatedFlashcards: FlashcardType[];
+
+      if (isAddingFlashcard) {
+        const newFlashcard: FlashcardType = {
+          id: `f-${Date.now()}`,
+          front,
+          back,
+          requirement_ids: [...flashcardForm.requirement_ids],
+          is_edited: false,
+          is_pinned: false,
+        };
+
+        updatedFlashcards = [...kit.flashcards, newFlashcard];
+      } else {
+        if (!editingFlashcard) {
+          throw new Error("No flashcard selected for editing.");
+        }
+
+        updatedFlashcards = kit.flashcards.map((flashcard) =>
+          flashcard.id === editingFlashcard.id
+            ? {
+                ...flashcard,
+                front,
+                back,
+                requirement_ids: [...flashcardForm.requirement_ids],
+                is_edited: true,
+              }
+            : flashcard,
+        );
+      }
+
+      const response = await apiRequest<{
+        message: string;
+        kit: InterviewKit;
+      }>(`/kits/${kitId}`, {
+        method: "PUT",
+        token,
+        body: {
+          flashcards: updatedFlashcards,
+        },
+      });
+
+      setKit(response.kit);
+
+      setFlashcardSaveSuccess(
+        isAddingFlashcard
+          ? "Flashcard added successfully."
+          : "Flashcard updated successfully.",
+      );
+
+      window.setTimeout(() => {
+        setIsFlashcardModalOpen(false);
+        setEditingFlashcard(null);
+        setIsAddingFlashcard(false);
+        setFlashcardSaveSuccess("");
+      }, 700);
+    } catch (err) {
+      console.error("Failed to save flashcard:", err);
+
+      setFlashcardSaveError(
+        err instanceof Error ? err.message : "Failed to save flashcard.",
+      );
+    } finally {
+      setFlashcardSaving(false);
+    }
+  };
+
+  /*
+   * Delete flashcard.
+   */
+  const handleDeleteFlashcard = async (flashcardId: string) => {
+    if (!kit || kit.generation?.status === "generating") {
+      return;
+    }
+
+    const token = getToken();
+
+    if (!token) {
+      router.push("/login");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this flashcard?",
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setError("");
+
+      const updatedFlashcards = kit.flashcards.filter(
+        (flashcard) => flashcard.id !== flashcardId,
+      );
+
+      const response = await apiRequest<{
+        message: string;
+        kit: InterviewKit;
+      }>(`/kits/${kitId}`, {
+        method: "PUT",
+        token,
+        body: {
+          flashcards: updatedFlashcards,
+        },
+      });
+
+      setKit(response.kit);
+    } catch (err) {
+      console.error("Failed to delete flashcard:", err);
+
+      setError(
+        err instanceof Error ? err.message : "Failed to delete flashcard.",
+      );
+    }
+  };
+
+  /*
+   * Pin / unpin flashcard.
+   */
+  const handleToggleFlashcardPin = async (flashcardId: string) => {
+    if (!kit || kit.generation?.status === "generating") {
+      return;
+    }
+
+    const token = getToken();
+
+    if (!token) {
+      router.push("/login");
+      return;
+    }
+
+    const updatedFlashcards = kit.flashcards.map((flashcard) =>
+      flashcard.id === flashcardId
+        ? {
+            ...flashcard,
+            is_pinned: !flashcard.is_pinned,
+          }
+        : flashcard,
+    );
+
+    try {
+      setError("");
+
+      const response = await apiRequest<{
+        message: string;
+        kit: InterviewKit;
+      }>(`/kits/${kitId}`, {
+        method: "PUT",
+        token,
+        body: {
+          flashcards: updatedFlashcards,
+        },
+      });
+
+      setKit(response.kit);
+    } catch (err) {
+      console.error("Failed to toggle flashcard pin:", err);
+
+      setError(
+        err instanceof Error ? err.message : "Failed to update flashcard pin.",
+      );
+    }
+  };
+
+  /*
+   * Loading state.
+   */
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50">
@@ -384,6 +1003,9 @@ export default function KitDetailPage() {
     );
   }
 
+  /*
+   * Kit not found.
+   */
   if (!kit) {
     return (
       <div className="min-h-screen bg-slate-50">
@@ -447,17 +1069,13 @@ export default function KitDetailPage() {
   const generationStatus = kit.generation?.status;
 
   const isGenerating = generationStatus === "generating";
-
   const isCompleted = generationStatus === "completed";
-
   const isFailed = generationStatus === "failed";
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Desktop Sidebar */}
       <Sidebar />
 
-      {/* Main Area */}
       <div className="lg:ml-64">
         <Header
           title={kit.source.role || "Interview Kit"}
@@ -501,7 +1119,7 @@ export default function KitDetailPage() {
                     <a
                       href={kit.source.company_url}
                       target="_blank"
-                      rel="noreferrer"
+                      rel="noopener noreferrer"
                       className="mt-3 inline-block text-sm font-medium text-indigo-600 hover:underline"
                     >
                       Visit company website ↗
@@ -537,12 +1155,31 @@ export default function KitDetailPage() {
 
                     <div>
                       <h3 className="font-semibold text-slate-900">
-                        Generating your interview kit
+                        {regeneratingSection
+                          ? `Regenerating ${
+                              regeneratingSection === "company_brief"
+                                ? "company brief"
+                                : regeneratingSection === "flashcards"
+                                  ? "flashcards"
+                                  : regeneratingSection === "schedule"
+                                    ? "schedule"
+                                    : regeneratingSection === "technical"
+                                      ? "technical questions"
+                                      : regeneratingSection === "behavioral"
+                                        ? "behavioral questions"
+                                        : regeneratingSection ===
+                                            "system_design"
+                                          ? "system design questions"
+                                          : regeneratingSection === "coding"
+                                            ? "coding questions"
+                                            : "questions"
+                            }`
+                          : "Generating your interview kit"}
                       </h3>
 
                       <p className="mt-1 text-sm text-slate-500">
-                        Researching the company and creating personalized
-                        preparation material...
+                        {kit.generation?.current_step ||
+                          "Researching the company and creating personalized preparation material..."}
                       </p>
                     </div>
                   </div>
@@ -556,7 +1193,14 @@ export default function KitDetailPage() {
                       </span>
                     </div>
 
-                    <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+                    <div
+                      className="h-2 overflow-hidden rounded-full bg-slate-200"
+                      role="progressbar"
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={kit.generation?.progress ?? 0}
+                      aria-label="Interview kit generation progress"
+                    >
                       <div
                         className="h-full rounded-full bg-indigo-600 transition-all duration-500"
                         style={{
@@ -635,9 +1279,18 @@ export default function KitDetailPage() {
             {/* Company Brief */}
             <Card className="mb-6">
               <div className="p-6">
-                <h2 className="text-xl font-bold text-slate-900">
-                  Company Brief
-                </h2>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <h2 className="text-xl font-bold text-slate-900">
+                    Company Brief
+                  </h2>
+
+                  <Button
+                    onClick={() => handleRegenerateSection("company_brief")}
+                    disabled={isGenerating}
+                  >
+                    Regenerate Brief
+                  </Button>
+                </div>
 
                 <div className="mt-5 space-y-5">
                   <div>
@@ -674,7 +1327,7 @@ export default function KitDetailPage() {
                             key={`${source}-${index}`}
                             href={source}
                             target="_blank"
-                            rel="noreferrer"
+                            rel="noopener noreferrer"
                             className="block break-all text-sm text-indigo-600 hover:underline"
                           >
                             {source}
@@ -805,18 +1458,66 @@ export default function KitDetailPage() {
                   </h2>
 
                   <p className="mt-1 text-sm text-slate-500">
-                    Questions generated from the role requirements. You can edit
-                    or add your own questions.
+                    Questions generated from the role requirements. You can
+                    edit, pin, reorder, delete, or add your own questions.
                   </p>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
                   <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600">
                     {questions.length}
                   </span>
 
-                  <Button onClick={handleAddQuestion}>+ Add Question</Button>
+                  <Button
+                    onClick={() => handleRegenerateSection("questions")}
+                    disabled={isGenerating}
+                  >
+                    Regenerate
+                  </Button>
+
+                  <Button onClick={handleAddQuestion} disabled={isGenerating}>
+                    + Add Question
+                  </Button>
                 </div>
+              </div>
+
+              {/* Category regeneration */}
+              <div className="mb-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleRegenerateSection("technical")}
+                  disabled={isGenerating}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Regenerate Technical
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleRegenerateSection("behavioral")}
+                  disabled={isGenerating}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Regenerate Behavioral
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleRegenerateSection("system_design")}
+                  disabled={isGenerating}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Regenerate System Design
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleRegenerateSection("coding")}
+                  disabled={isGenerating}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Regenerate Coding
+                </button>
               </div>
 
               {questions.length === 0 ? (
@@ -827,7 +1528,10 @@ export default function KitDetailPage() {
                     </p>
 
                     <div className="mt-4">
-                      <Button onClick={handleAddQuestion}>
+                      <Button
+                        onClick={handleAddQuestion}
+                        disabled={isGenerating}
+                      >
                         + Add First Question
                       </Button>
                     </div>
@@ -840,8 +1544,12 @@ export default function KitDetailPage() {
                       key={question.id}
                       question={question}
                       index={index}
+                      totalQuestions={questions.length}
                       onEdit={handleEditQuestion}
                       onDelete={handleDeleteQuestion}
+                      onTogglePin={handleToggleQuestionPin}
+                      onMoveUp={handleMoveQuestionUp}
+                      onMoveDown={handleMoveQuestionDown}
                     />
                   ))}
                 </div>
@@ -850,12 +1558,29 @@ export default function KitDetailPage() {
 
             {/* Flashcards */}
             <section className="mb-6">
-              <div className="mb-4">
-                <h2 className="text-xl font-bold text-slate-900">Flashcards</h2>
+              <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900">
+                    Flashcards
+                  </h2>
 
-                <p className="mt-1 text-sm text-slate-500">
-                  Quickly revise important interview concepts.
-                </p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Quickly revise important interview concepts.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    onClick={() => handleRegenerateSection("flashcards")}
+                    disabled={isGenerating}
+                  >
+                    Regenerate
+                  </Button>
+
+                  <Button onClick={handleAddFlashcard} disabled={isGenerating}>
+                    + Add Flashcard
+                  </Button>
+                </div>
               </div>
 
               {flashcards.length === 0 ? (
@@ -864,16 +1589,68 @@ export default function KitDetailPage() {
                     <p className="text-sm text-slate-500">
                       No flashcards generated yet.
                     </p>
+
+                    <div className="mt-4">
+                      <Button
+                        onClick={handleAddFlashcard}
+                        disabled={isGenerating}
+                      >
+                        + Add First Flashcard
+                      </Button>
+                    </div>
                   </div>
                 </Card>
               ) : (
                 <div className="grid gap-4 md:grid-cols-2">
                   {flashcards.map((flashcard, index) => (
-                    <Flashcard
-                      key={flashcard.id}
-                      flashcard={flashcard}
-                      index={index}
-                    />
+                    <div key={flashcard.id} className="relative">
+                      <Flashcard flashcard={flashcard} index={index} />
+
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        {flashcard.is_edited && (
+                          <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
+                            Edited
+                          </span>
+                        )}
+
+                        {flashcard.is_pinned && (
+                          <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700">
+                            📌 Pinned
+                          </span>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => handleToggleFlashcardPin(flashcard.id)}
+                          disabled={isGenerating}
+                          className={`rounded-lg border px-3 py-2 text-xs font-medium transition ${
+                            flashcard.is_pinned
+                              ? "border-indigo-200 bg-indigo-50 text-indigo-700"
+                              : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                          } disabled:cursor-not-allowed disabled:opacity-50`}
+                        >
+                          {flashcard.is_pinned ? "Unpin" : "Pin"}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleEditFlashcard(flashcard)}
+                          disabled={isGenerating}
+                          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Edit
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteFlashcard(flashcard.id)}
+                          disabled={isGenerating}
+                          className="rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
                   ))}
                 </div>
               )}
@@ -881,15 +1658,24 @@ export default function KitDetailPage() {
 
             {/* Schedule */}
             <section className="mb-6">
-              <div className="mb-4">
-                <h2 className="text-xl font-bold text-slate-900">
-                  Preparation Schedule
-                </h2>
+              <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900">
+                    Preparation Schedule
+                  </h2>
 
-                <p className="mt-1 text-sm text-slate-500">
-                  Your preparation plan for {kit.schedule?.days_available ?? 0}{" "}
-                  days.
-                </p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Your preparation plan for{" "}
+                    {kit.schedule?.days_available ?? 0} days.
+                  </p>
+                </div>
+
+                <Button
+                  onClick={() => handleRegenerateSection("schedule")}
+                  disabled={isGenerating}
+                >
+                  Regenerate Schedule
+                </Button>
               </div>
 
               {scheduleDays.length === 0 ? (
@@ -903,7 +1689,11 @@ export default function KitDetailPage() {
               ) : (
                 <div className="grid gap-4 md:grid-cols-2">
                   {scheduleDays.map((day) => (
-                    <ScheduleDay key={day.day} day={day} />
+                    <ScheduleDay
+                      key={day.day}
+                      day={day}
+                      questions={questions}
+                    />
                   ))}
                 </div>
               )}
@@ -935,7 +1725,14 @@ export default function KitDetailPage() {
                   </div>
                 </div>
 
-                <div className="mt-5 h-3 overflow-hidden rounded-full bg-slate-200">
+                <div
+                  className="mt-5 h-3 overflow-hidden rounded-full bg-slate-200"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={coveragePercentage}
+                  aria-label="Requirement coverage"
+                >
                   <div
                     className="h-full rounded-full bg-emerald-500 transition-all duration-500"
                     style={{
@@ -1006,12 +1803,28 @@ export default function KitDetailPage() {
 
       {/* Question Editor Modal */}
       {isQuestionModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              handleCloseQuestionModal();
+            }
+          }}
+        >
+          <div
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="question-modal-title"
+          >
             {/* Modal Header */}
             <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4 sm:px-6">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">
+                <h2
+                  id="question-modal-title"
+                  className="text-lg font-bold text-slate-900"
+                >
                   {isAddingQuestion ? "Add Question" : "Edit Question"}
                 </h2>
 
@@ -1025,7 +1838,7 @@ export default function KitDetailPage() {
                 onClick={handleCloseQuestionModal}
                 disabled={questionSaving}
                 className="flex h-9 w-9 items-center justify-center rounded-lg text-xl text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed"
-                aria-label="Close"
+                aria-label="Close question editor"
               >
                 ×
               </button>
@@ -1103,13 +1916,9 @@ export default function KitDetailPage() {
                     className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                   >
                     <option value="technical">Technical</option>
-
                     <option value="behavioral">Behavioral</option>
-
                     <option value="system_design">System Design</option>
-
                     <option value="coding">Coding</option>
-
                     <option value="other">Other</option>
                   </select>
                 </div>
@@ -1136,9 +1945,7 @@ export default function KitDetailPage() {
                     className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                   >
                     <option value={1}>Easy</option>
-
                     <option value={2}>Medium</option>
-
                     <option value={3}>Hard</option>
                   </select>
                 </div>
@@ -1250,6 +2057,212 @@ export default function KitDetailPage() {
                   ? "Saving..."
                   : isAddingQuestion
                     ? "Add Question"
+                    : "Save Changes"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Flashcard Editor Modal */}
+      {isFlashcardModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              handleCloseFlashcardModal();
+            }
+          }}
+        >
+          <div
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="flashcard-modal-title"
+          >
+            {/* Header */}
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4 sm:px-6">
+              <div>
+                <h2
+                  id="flashcard-modal-title"
+                  className="text-lg font-bold text-slate-900"
+                >
+                  {isAddingFlashcard ? "Add Flashcard" : "Edit Flashcard"}
+                </h2>
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Create a concise revision card for your interview preparation.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleCloseFlashcardModal}
+                disabled={flashcardSaving}
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-xl text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed"
+                aria-label="Close flashcard editor"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="space-y-5 p-5 sm:p-6">
+              {/* Front */}
+              <div>
+                <label
+                  htmlFor="flashcard-front"
+                  className="text-sm font-semibold text-slate-700"
+                >
+                  Front
+                </label>
+
+                <textarea
+                  id="flashcard-front"
+                  value={flashcardForm.front}
+                  onChange={(event) =>
+                    setFlashcardForm((current) => ({
+                      ...current,
+                      front: event.target.value,
+                    }))
+                  }
+                  rows={4}
+                  placeholder="Example: What is JWT?"
+                  className="mt-2 w-full resize-y rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                />
+              </div>
+
+              {/* Back */}
+              <div>
+                <label
+                  htmlFor="flashcard-back"
+                  className="text-sm font-semibold text-slate-700"
+                >
+                  Back / Answer
+                </label>
+
+                <textarea
+                  id="flashcard-back"
+                  value={flashcardForm.back}
+                  onChange={(event) =>
+                    setFlashcardForm((current) => ({
+                      ...current,
+                      back: event.target.value,
+                    }))
+                  }
+                  rows={6}
+                  placeholder="Enter the concise answer..."
+                  className="mt-2 w-full resize-y rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                />
+              </div>
+
+              {/* Requirements */}
+              <div>
+                <p className="text-sm font-semibold text-slate-700">
+                  Related Requirements
+                </p>
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Select which requirements this flashcard helps revise.
+                </p>
+
+                {requirements.length === 0 ? (
+                  <p className="mt-3 rounded-xl bg-slate-50 p-4 text-sm text-slate-500">
+                    No requirements available.
+                  </p>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    {requirements.map((requirement) => {
+                      const selected = flashcardForm.requirement_ids.includes(
+                        requirement.id,
+                      );
+
+                      return (
+                        <label
+                          key={requirement.id}
+                          className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${
+                            selected
+                              ? "border-indigo-300 bg-indigo-50"
+                              : "border-slate-200 hover:bg-slate-50"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            onChange={() =>
+                              handleFlashcardRequirementToggle(requirement.id)
+                            }
+                            className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                          />
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-mono text-xs font-semibold text-slate-500">
+                                {requirement.id}
+                              </span>
+
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                  requirement.priority === "must"
+                                    ? "bg-red-100 text-red-700"
+                                    : "bg-amber-100 text-amber-700"
+                                }`}
+                              >
+                                {requirement.priority}
+                              </span>
+                            </div>
+
+                            <p className="mt-1 text-sm leading-5 text-slate-700">
+                              {requirement.text}
+                            </p>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Errors */}
+              {flashcardSaveError && (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                  <p className="text-sm font-medium text-red-700">
+                    {flashcardSaveError}
+                  </p>
+                </div>
+              )}
+
+              {flashcardSaveSuccess && (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                  <p className="text-sm font-medium text-emerald-700">
+                    ✓ {flashcardSaveSuccess}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="sticky bottom-0 flex flex-col-reverse gap-3 border-t border-slate-200 bg-white px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
+              <button
+                type="button"
+                onClick={handleCloseFlashcardModal}
+                disabled={flashcardSaving}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSaveFlashcard}
+                disabled={flashcardSaving}
+                className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {flashcardSaving
+                  ? "Saving..."
+                  : isAddingFlashcard
+                    ? "Add Flashcard"
                     : "Save Changes"}
               </button>
             </div>
