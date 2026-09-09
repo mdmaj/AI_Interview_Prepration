@@ -1,10 +1,16 @@
 import { GoogleGenAI } from "@google/genai";
 
-const DEFAULT_MODEL = "gemini-3.7-flash";
+const DEFAULT_MODEL = "gemini-3.6-flash";
+const DEFAULT_FALLBACK_MODEL = "gemini-3.5-flash-lite";
 
 const DEFAULT_MAX_RETRIES = 2;
 const DEFAULT_INITIAL_DELAY_MS = 1500;
 const MAX_RETRY_DELAY_MS = 10000;
+
+const MODEL_ALIASES: Record<string, string> = {
+  "gemini-2.5-flash": DEFAULT_MODEL,
+  "gemini-2.5-flash-lite": DEFAULT_FALLBACK_MODEL,
+};
 
 const sleep = async (ms: number): Promise<void> => {
   await new Promise((resolve) => setTimeout(resolve, ms));
@@ -50,18 +56,13 @@ const getErrorDetails = (error: unknown): GeminiErrorDetails => {
 
   const normalizedMessage = `${serializedError} ${message ?? ""}`.toLowerCase();
 
-  /*
-   * Gemini daily quota errors are NOT retryable.
-   *
-   * Example:
-   * GenerateRequestsPerDayPerProjectPerModel-FreeTier
-   */
   const isDailyQuotaExceeded =
     normalizedMessage.includes("generaterequestsperdayperprojectpermodel") ||
     normalizedMessage.includes("requests per day") ||
     normalizedMessage.includes("daily quota") ||
     normalizedMessage.includes("quota exhausted") ||
-    normalizedMessage.includes("perday");
+    normalizedMessage.includes("perday") ||
+    normalizedMessage.includes("free_tier_requests");
 
   const isRateLimited =
     status === 429 ||
@@ -81,13 +82,6 @@ const getErrorDetails = (error: unknown): GeminiErrorDetails => {
     normalizedMessage.includes("overloaded") ||
     normalizedMessage.includes("server error");
 
-  /*
-   * Gemini may return retryDelay in different formats.
-   *
-   * Examples:
-   * retryDelay: "5s"
-   * retryDelay: "2.5s"
-   */
   const retryDelayMatch =
     normalizedMessage.match(/retrydelay["']?\s*:\s*["']?(\d+(?:\.\d+)?)s/i) ??
     message?.match(/retrydelay["']?\s*:\s*["']?(\d+(?:\.\d+)?)s/i);
@@ -109,17 +103,14 @@ const getErrorDetails = (error: unknown): GeminiErrorDetails => {
 const isRetryableError = (error: unknown): boolean => {
   const details = getErrorDetails(error);
 
-  // Daily quota cannot be fixed by retrying.
   if (details.isDailyQuotaExceeded) {
     return false;
   }
 
-  // Temporary rate limit can recover.
   if (details.isRateLimited) {
     return true;
   }
 
-  // Temporary Gemini/provider failures can recover.
   if (details.isTemporaryServerError) {
     return true;
   }
@@ -140,8 +131,7 @@ const formatGeminiError = (error: unknown): string => {
   if (details.isDailyQuotaExceeded) {
     return (
       "Gemini API daily quota has been exhausted. " +
-      "Please wait for the quota to reset or use a Gemini API " +
-      "project/model with available quota."
+      "The configured model has no remaining free-tier requests."
     );
   }
 
@@ -169,22 +159,29 @@ const formatGeminiError = (error: unknown): string => {
   return "Failed to generate response from Gemini.";
 };
 
-export const generateText = async (
+const getModels = (): string[] => {
+  const configuredPrimaryModel = process.env.GEMINI_MODEL?.trim();
+  const configuredFallbackModel = process.env.GEMINI_FALLBACK_MODEL?.trim();
+
+  const primaryModel =
+    MODEL_ALIASES[configuredPrimaryModel ?? ""] ??
+    configuredPrimaryModel ??
+    DEFAULT_MODEL;
+
+  const fallbackModel =
+    MODEL_ALIASES[configuredFallbackModel ?? ""] ??
+    configuredFallbackModel ??
+    DEFAULT_FALLBACK_MODEL;
+
+  return [...new Set([primaryModel, fallbackModel])];
+};
+
+const generateWithModel = async (
+  ai: GoogleGenAI,
+  model: string,
   prompt: string,
-  maxRetries = DEFAULT_MAX_RETRIES,
+  maxRetries: number,
 ): Promise<string> => {
-  const apiKey = process.env.GEMINI_API_KEY;
-
-  if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is not configured");
-  }
-
-  const model = process.env.GEMINI_MODEL?.trim() || DEFAULT_MODEL;
-
-  const ai = new GoogleGenAI({
-    apiKey,
-  });
-
   let lastError: unknown;
 
   for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
@@ -201,8 +198,10 @@ export const generateText = async (
       const text = response.text?.trim();
 
       if (!text) {
-        throw new Error("Gemini returned an empty response");
+        throw new Error(`Gemini returned an empty response from ${model}`);
       }
+
+      console.log(`Gemini generation succeeded using ${model}`);
 
       return text;
     } catch (error) {
@@ -221,31 +220,22 @@ export const generateText = async (
         retryDelaySeconds: details.retryDelaySeconds,
       });
 
-      // ---------------------------------------------------------
-      // 1. Daily quota exhausted
-      // ---------------------------------------------------------
-      // NEVER retry this.
+      /*
+       * Daily quota is model-specific and cannot be fixed
+       * by retrying the same model.
+       */
       if (details.isDailyQuotaExceeded) {
         break;
       }
 
-      // ---------------------------------------------------------
-      // 2. Non-retryable error
-      // ---------------------------------------------------------
       if (!isRetryableError(error)) {
         break;
       }
 
-      // ---------------------------------------------------------
-      // 3. No retries remaining
-      // ---------------------------------------------------------
       if (attempt > maxRetries) {
         break;
       }
 
-      // ---------------------------------------------------------
-      // 4. Calculate retry delay
-      // ---------------------------------------------------------
       const exponentialDelay = DEFAULT_INITIAL_DELAY_MS * 2 ** (attempt - 1);
 
       const providerDelay =
@@ -255,27 +245,74 @@ export const generateText = async (
 
       const retryDelay = Math.min(providerDelay, MAX_RETRY_DELAY_MS);
 
-      // Small jitter.
       const jitter = Math.floor(Math.random() * 300);
 
       const totalDelay = retryDelay + jitter;
 
-      console.log(
-        `Gemini request failed. ` + `Retrying after ${totalDelay}ms...`,
-      );
+      console.log(`Retrying ${model} after ${totalDelay}ms...`);
 
       await sleep(totalDelay);
     }
   }
 
+  throw lastError ?? new Error("Gemini generation failed");
+};
+
+export const generateText = async (
+  prompt: string,
+  maxRetries = DEFAULT_MAX_RETRIES,
+): Promise<string> => {
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY is not configured");
+  }
+
+  if (!prompt.trim()) {
+    throw new Error("Gemini prompt cannot be empty");
+  }
+
+  const ai = new GoogleGenAI({
+    apiKey,
+  });
+
+  const models = getModels();
+
+  let lastError: unknown;
+
+  for (let index = 0; index < models.length; index++) {
+    const model = models[index];
+
+    try {
+      console.log(`Starting Gemini generation with model ${model}`);
+
+      return await generateWithModel(ai, model, prompt, maxRetries);
+    } catch (error) {
+      lastError = error;
+
+      const details = getErrorDetails(error);
+
+      const hasAnotherModel = index < models.length - 1;
+
+      /*
+       * If the current model is exhausted or temporarily
+       * unavailable, move to the fallback model.
+       */
+      if (hasAnotherModel) {
+        console.warn(
+          `Gemini model ${model} failed. ` +
+            `Trying fallback model ${models[index + 1]}.`,
+        );
+
+        continue;
+      }
+
+      break;
+    }
+  }
+
   const details = getErrorDetails(lastError);
 
-  /*
-   * Add machine-readable prefixes.
-   *
-   * The evaluator can now classify errors reliably without
-   * depending on Gemini's exact raw error message.
-   */
   if (details.isDailyQuotaExceeded) {
     throw new Error(`LLM_RATE_LIMITED: ${formatGeminiError(lastError)}`);
   }

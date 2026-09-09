@@ -16,10 +16,12 @@ export interface CompanyResearch {
   failedUrls: string[];
 }
 
+const MAX_DISCOVERED_PAGES = 5;
+
 export const crawlCompany = async (
   companyUrl: string,
 ): Promise<CompanyResearch> => {
-  // 1. Validate URL
+  // 1. Validate company URL
   const validatedUrl = await validateExternalUrl(companyUrl);
 
   const normalizedUrl = validatedUrl.toString();
@@ -48,10 +50,10 @@ export const crawlCompany = async (
   }
 
   // 4. Extract homepage
-  const homepageData = extractPage(homepage.html, normalizedUrl);
+  const homepageData = extractPage(homepage.html, homepage.url);
 
   pages.push({
-    url: normalizedUrl,
+    url: homepage.url,
     title: homepageData.title,
     text: homepageData.text,
   });
@@ -59,7 +61,30 @@ export const crawlCompany = async (
   // 5. Discover relevant links
   const rankedLinks = rankLinks(homepageData.links);
 
-  const selectedLinks = rankedLinks.slice(0, 5).map((item) => item.url);
+  const selectedLinks: string[] = [];
+
+  for (const item of rankedLinks) {
+    if (selectedLinks.length >= MAX_DISCOVERED_PAGES) {
+      break;
+    }
+
+    try {
+      // Validate every discovered URL.
+      const validatedLink = await validateExternalUrl(item.url);
+
+      // For company research, stay on the same hostname.
+      if (
+        validatedLink.hostname.toLowerCase() !==
+        validatedUrl.hostname.toLowerCase()
+      ) {
+        continue;
+      }
+
+      selectedLinks.push(validatedLink.toString());
+    } catch {
+      failedUrls.push(`${item.url} (blocked or invalid URL)`);
+    }
+  }
 
   // 6. Fetch selected pages
   for (const url of selectedLinks) {
@@ -73,15 +98,17 @@ export const crawlCompany = async (
 
       const page = await fetchPage(url);
 
-      const extracted = extractPage(page.html, url);
+      const extracted = extractPage(page.html, page.url);
 
       pages.push({
-        url,
+        url: page.url,
         title: extracted.title,
         text: extracted.text,
       });
-    } catch {
-      failedUrls.push(url);
+    } catch (error) {
+      failedUrls.push(
+        `${url}${error instanceof Error ? ` (${error.message})` : ""}`,
+      );
     }
   }
 

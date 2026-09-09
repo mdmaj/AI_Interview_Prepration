@@ -10,6 +10,7 @@ import InterviewKit, {
 import { generateCompanyBrief } from "../ai/companyBrief.js";
 import { generateQuestions } from "../ai/questionGenerator.js";
 import { generateFlashcards } from "../ai/flashcardsGenerator.js";
+import { extractRequirements } from "../ai/requirementExtractor.js";
 
 import { crawlCompany } from "../crawler/index.js";
 import { researchInterview } from "../research/interviewResearch.js";
@@ -483,21 +484,39 @@ const cleanScheduleQuestionIds = (
   days: ScheduleDay[];
 } => {
   const validQuestionIds = new Set(questions.map((question) => question.id));
+  const existingDaysByNumber = new Map(
+    (schedule.days ?? []).map((day) => [day.day, day]),
+  );
+  const totalDays = schedule.days_available;
+
+  const days = Array.from({ length: totalDays }, (_, index) => {
+    const dayNumber = index + 1;
+    const existingDay = existingDaysByNumber.get(dayNumber);
+
+    return existingDay
+      ? {
+          ...existingDay,
+          question_ids: [
+            ...new Set(
+              (existingDay.question_ids ?? []).filter((questionId) =>
+                validQuestionIds.has(questionId),
+              ),
+            ),
+          ],
+        }
+      : {
+          day: dayNumber,
+          focus: "Interview preparation",
+          question_ids: [],
+          minutes: 0,
+          is_edited: false,
+          is_pinned: false,
+        };
+  });
 
   return {
-    days_available: schedule.days_available,
-
-    days: schedule.days.map((day) => ({
-      ...day,
-
-      question_ids: [
-        ...new Set(
-          (day.question_ids ?? []).filter((questionId) =>
-            validQuestionIds.has(questionId),
-          ),
-        ),
-      ],
-    })),
+    days_available: totalDays,
+    days,
   };
 };
 
@@ -954,6 +973,25 @@ export const regenerateInterviewKit = async ({
 
     console.log(`\n🔄 Regenerating ${section} for kit: ${kitId}`);
 
+    if (section === "questions" && kit.role.requirements.length === 0) {
+      console.log(
+        "No saved role requirements found; extracting them from the job description.",
+      );
+
+      const extractedRole = await extractRequirements(kit.source.jd);
+
+      if (extractedRole.requirements.length === 0) {
+        throw new Error(
+          "Cannot regenerate questions because no role requirements could be extracted from the job description.",
+        );
+      }
+
+      kit.role.title = extractedRole.title;
+      kit.role.seniority = extractedRole.seniority;
+      kit.role.responsibilities = extractedRole.responsibilities;
+      kit.role.requirements = extractedRole.requirements;
+    }
+
     await updateGeneration(
       kitId,
       userId,
@@ -1113,12 +1151,6 @@ export const regenerateInterviewKit = async ({
      */
 
     if (section === "questions") {
-      if (kit.role.requirements.length === 0) {
-        throw new Error(
-          "Cannot regenerate questions without role requirements.",
-        );
-      }
-
       await updateGeneration(
         kitId,
         userId,
@@ -1613,7 +1645,7 @@ export const regenerateInterviewKit = async ({
         company: kit.source.company,
         company_url: kit.source.company_url,
         role: kit.source.role,
-        location: kit.source.location,
+        location: kit.source.location?.trim() || "Not specified",
         jd_chars: kit.source.jd_chars,
         researched_at: candidateResearchedAt,
         pages_used: candidatePagesUsed,
@@ -1623,7 +1655,7 @@ export const regenerateInterviewKit = async ({
 
       role: {
         title: kit.role.title,
-        seniority: kit.role.seniority,
+        seniority: kit.role.seniority?.trim() || "Not specified",
         responsibilities: [...kit.role.responsibilities],
         requirements: kit.role.requirements,
       },
@@ -1634,7 +1666,10 @@ export const regenerateInterviewKit = async ({
 
       schedule: candidateSchedule,
 
-      coverage: candidateCoverage,
+      coverage: {
+        ...candidateCoverage,
+        passes: Math.max(1, candidateCoverage.passes),
+      },
     };
 
     validateCandidateKit(candidate, kit.schedule.days_available);
@@ -1666,7 +1701,17 @@ export const regenerateInterviewKit = async ({
 
           schedule: candidateSchedule,
 
-          coverage: candidateCoverage,
+          coverage: {
+            ...candidateCoverage,
+            passes: Math.max(1, candidateCoverage.passes),
+          },
+
+          "role.title": kit.role.title,
+          "role.seniority": kit.role.seniority?.trim() || "Not specified",
+          "role.responsibilities": kit.role.responsibilities,
+          "role.requirements": kit.role.requirements,
+
+          "source.location": kit.source.location?.trim() || "Not specified",
 
           "source.pages_used": candidatePagesUsed,
 
@@ -1674,7 +1719,7 @@ export const regenerateInterviewKit = async ({
         },
       },
       {
-        new: true,
+        returnDocument: "after",
         runValidators: true,
       },
     );

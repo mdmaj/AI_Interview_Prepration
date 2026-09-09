@@ -504,7 +504,7 @@ Do not invent company-specific facts.`;
         company: kit.source.company,
         company_url: kit.source.company_url,
         role: kit.source.role,
-        location: kit.source.location,
+        location: kit.source.location?.trim() || "Not specified",
         jd_chars: kit.source.jd_chars,
         researched_at: researchedAt,
         pages_used: pagesUsed,
@@ -575,6 +575,8 @@ Do not invent company-specific facts.`;
       },
       {
         $set: {
+          "source.location": kit.source.location?.trim() || "Not specified",
+
           "source.researched_at": researchedAt,
 
           "source.pages_used": pagesUsed,
