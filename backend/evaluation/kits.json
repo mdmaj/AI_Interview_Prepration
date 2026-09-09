@@ -1,51 +1,1012 @@
 {
   "version": "1.0",
-  "generated_at": "2026-09-09T16:45:58.000Z",
+  "generated_at": "2026-09-09T19:29:11.856Z",
   "kits": [
     {
       "id": "case-01",
-      "status": "failed",
-      "kit": null,
-      "error": {
-        "code": "LLM_RATE_LIMITED",
-        "message": "LLM_RATE_LIMITED: Gemini API daily quota has been exhausted. Please wait for the quota to reset or use a Gemini API project/model with available quota."
-      }
+      "status": "ok",
+      "kit": {
+        "source": {
+          "company": "Google",
+          "company_url": "https://www.google.com",
+          "role": "Full Stack Developer",
+          "location": "Not specified",
+          "jd_chars": 220,
+          "researched_at": "2026-09-09T19:27:28.723Z",
+          "pages_used": [
+            "https://www.google.com/",
+            "https://about.google/"
+          ]
+        },
+        "company_brief": {
+          "summary": "Google is a global technology entity offering digital products, enterprise solutions, and artificial intelligence research. Its offerings include Search, Gmail, Google Workspace, advertising, business solutions, Google Cloud, and AI models such as Gemini 3.8 Flash and AlphaGenome Atlas, along with global initiatives in health, crisis response, and sustainability.",
+          "what_they_do": "Google develops and operates products and features across web search, productivity tools like Google Workspace, advertising services, business solutions, and advanced AI technologies through divisions like Google DeepMind, Google Research, and Google Cloud.",
+          "sources": [
+            "https://www.google.com/",
+            "https://about.google/"
+          ]
+        },
+        "role": {
+          "title": "Full Stack Developer",
+          "seniority": "Not specified",
+          "responsibilities": [
+            "Building REST APIs",
+            "Working with databases",
+            "Developing responsive web applications"
+          ],
+          "requirements": [
+            {
+              "id": "r1",
+              "text": "Experience with React",
+              "kind": "technical",
+              "priority": "must"
+            },
+            {
+              "id": "r2",
+              "text": "Experience with Node.js",
+              "kind": "technical",
+              "priority": "must"
+            },
+            {
+              "id": "r3",
+              "text": "Experience with Express",
+              "kind": "technical",
+              "priority": "must"
+            },
+            {
+              "id": "r4",
+              "text": "Experience with MongoDB",
+              "kind": "technical",
+              "priority": "must"
+            },
+            {
+              "id": "r5",
+              "text": "Ability to build REST APIs",
+              "kind": "technical",
+              "priority": "must"
+            },
+            {
+              "id": "r6",
+              "text": "Ability to work with databases",
+              "kind": "technical",
+              "priority": "must"
+            },
+            {
+              "id": "r7",
+              "text": "Ability to develop responsive web applications",
+              "kind": "technical",
+              "priority": "must"
+            }
+          ]
+        },
+        "questions": [
+          {
+            "requirement_ids": [
+              "r1",
+              "r7"
+            ],
+            "category": "technical",
+            "prompt": "Explain how you manage state and optimize rendering performance in a complex React application, and how you ensure responsive design across various device viewports.",
+            "answer_outline": "Candidate should discuss React state management strategies (Context API, Redux, or Zustand), avoiding unnecessary re-renders using useMemo and useCallback, and responsive web design techniques utilizing CSS Grid, Flexbox, media queries, and mobile-first design principles.",
+            "difficulty": 2,
+            "id": "q1"
+          },
+          {
+            "requirement_ids": [
+              "r2",
+              "r3",
+              "r5"
+            ],
+            "category": "technical",
+            "prompt": "Design a secure and scalable REST API endpoint using Node.js and Express that handles user authentication and pagination for large datasets.",
+            "answer_outline": "Candidate should explain Express middleware usage for authentication and validation, error handling middleware, asynchronous route handlers, and implementing cursor-based or limit-offset pagination for efficient data retrieval.",
+            "difficulty": 2,
+            "id": "q2"
+          },
+          {
+            "requirement_ids": [
+              "r4",
+              "r6"
+            ],
+            "category": "technical",
+            "prompt": "How do you design a MongoDB schema for a high-traffic application with frequent read and write operations, and how do you handle indexing and data aggregation?",
+            "answer_outline": "Candidate should discuss embedding vs. referencing documents based on access patterns, creating appropriate single-field and compound indexes to optimize query performance, and using the MongoDB Aggregation Pipeline for complex data processing.",
+            "difficulty": 3,
+            "id": "q3"
+          },
+          {
+            "requirement_ids": [
+              "r1",
+              "r2",
+              "r3",
+              "r4",
+              "r5",
+              "r6",
+              "r7"
+            ],
+            "category": "system_design",
+            "prompt": "Walk through the end-to-end architecture of a real-time collaborative dashboard built with React, Node.js, Express, and MongoDB, highlighting how the REST API and database interact to support responsive client updates.",
+            "answer_outline": "Candidate should cover client-side React components rendering responsive UI, Node.js/Express server handling API requests, MongoDB data modeling for collaborative entities, database connection management, and potential integration of WebSockets or polling for real-time synchronization.",
+            "difficulty": 3,
+            "id": "q4"
+          }
+        ],
+        "flashcards": [
+          {
+            "front": "How do you manage state and optimize rendering performance in React, and ensure responsive design?",
+            "back": "Use state management libraries (Context, Redux, Zustand), prevent re-renders with useMemo and useCallback, and apply CSS Grid, Flexbox, media queries, and mobile-first principles for responsiveness.",
+            "requirement_ids": [
+              "r1",
+              "r7"
+            ],
+            "id": "f1"
+          },
+          {
+            "front": "How do you design a secure, scalable Express REST API with authentication and pagination?",
+            "back": "Use Express middleware for auth and validation, implement global error handling, write async route handlers, and use cursor or limit-offset pagination for large datasets.",
+            "requirement_ids": [
+              "r2",
+              "r3",
+              "r5"
+            ],
+            "id": "f2"
+          },
+          {
+            "front": "How do you design a MongoDB schema, handle indexing, and use data aggregation for high-traffic apps?",
+            "back": "Choose between embedding and referencing based on access patterns, create single-field and compound indexes for query optimization, and utilize the Aggregation Pipeline for complex data processing.",
+            "requirement_ids": [
+              "r4",
+              "r6"
+            ],
+            "id": "f3"
+          },
+          {
+            "front": "What is the end-to-end architecture of a real-time collaborative dashboard using the MERN stack?",
+            "back": "React handles responsive UI components, Node.js and Express process REST APIs and server logic, MongoDB models collaborative entities, and WebSockets or polling synchronize real-time updates.",
+            "requirement_ids": [
+              "r1",
+              "r2",
+              "r3",
+              "r4",
+              "r5",
+              "r6",
+              "r7"
+            ],
+            "id": "f4"
+          }
+        ],
+        "schedule": {
+          "days_available": 5,
+          "days": [
+            {
+              "day": 1,
+              "focus": "Technical",
+              "question_ids": [
+                "q3"
+              ],
+              "minutes": 60
+            },
+            {
+              "day": 2,
+              "focus": "System Design",
+              "question_ids": [
+                "q4"
+              ],
+              "minutes": 60
+            },
+            {
+              "day": 3,
+              "focus": "Technical",
+              "question_ids": [
+                "q1"
+              ],
+              "minutes": 45
+            },
+            {
+              "day": 4,
+              "focus": "Technical",
+              "question_ids": [
+                "q2"
+              ],
+              "minutes": 45
+            },
+            {
+              "day": 5,
+              "focus": "Review",
+              "question_ids": [
+                "q3",
+                "q4"
+              ],
+              "minutes": 60
+            }
+          ]
+        },
+        "coverage": {
+          "uncovered_requirement_ids": [],
+          "passes": 1
+        }
+      },
+      "error": null
     },
     {
       "id": "case-02",
-      "status": "failed",
-      "kit": null,
-      "error": {
-        "code": "LLM_RATE_LIMITED",
-        "message": "LLM_RATE_LIMITED: Gemini API daily quota has been exhausted. Please wait for the quota to reset or use a Gemini API project/model with available quota."
-      }
+      "status": "ok",
+      "kit": {
+        "source": {
+          "company": "Microsoft",
+          "company_url": "https://www.microsoft.com",
+          "role": "Frontend Developer",
+          "location": "Not specified",
+          "jd_chars": 203,
+          "researched_at": "2026-09-09T19:28:20.446Z",
+          "pages_used": [
+            "https://www.microsoft.com/en-in",
+            "https://www.microsoft.com/en-in/education/products/teams",
+            "https://www.microsoft.com/en-us/about",
+            "https://www.microsoft.com/en-ca/privacy?icid=DSM_Footer_Company_Privacy"
+          ]
+        },
+        "company_brief": {
+          "summary": "Microsoft is a technology company whose mission is to empower every person and every organization on the planet to achieve more. Guided by corporate values of respect, integrity, and accountability, the company focuses on expanding economic opportunity, earning trust, protecting fundamental rights, and advancing sustainability.",
+          "what_they_do": "Microsoft provides a broad range of hardware, software, cloud services, and AI solutions for personal and business use. Its major product offerings include Microsoft 365, Windows (such as Windows 11 and Windows 365), Azure, Surface devices, Xbox gaming consoles and Game Pass, Microsoft Copilot, OneDrive, Teams, and developer tools like Visual Studio. The company also offers specialized solutions for education, security, and digital sovereignty.",
+          "sources": [
+            "https://www.microsoft.com/en-in",
+            "https://www.microsoft.com/en-in/education/products/teams",
+            "https://www.microsoft.com/en-us/about",
+            "https://www.microsoft.com/en-ca/privacy?icid=DSM_Footer_Company_Privacy"
+          ]
+        },
+        "role": {
+          "title": "Frontend Developer",
+          "seniority": "mid",
+          "responsibilities": [
+            "Building reusable UI components",
+            "Integrating APIs",
+            "Collaborating with backend engineers"
+          ],
+          "requirements": [
+            {
+              "id": "r1",
+              "text": "Strong experience in React",
+              "kind": "technical",
+              "priority": "must"
+            },
+            {
+              "id": "r2",
+              "text": "Strong experience in JavaScript",
+              "kind": "technical",
+              "priority": "must"
+            },
+            {
+              "id": "r3",
+              "text": "Strong experience in HTML",
+              "kind": "technical",
+              "priority": "must"
+            },
+            {
+              "id": "r4",
+              "text": "Strong experience in CSS",
+              "kind": "technical",
+              "priority": "must"
+            }
+          ]
+        },
+        "questions": [
+          {
+            "requirement_ids": [
+              "r1",
+              "r2"
+            ],
+            "category": "coding",
+            "prompt": "Implement a robust, component-based To-Do application in React that supports adding, editing, and removing tasks. Ensure state management is handled efficiently and discuss how you would structure the components for scalability.",
+            "answer_outline": "A strong candidate should:\n1. Structure the application into modular components (e.g., TodoList, TodoItem, TodoInput).\n2. Manage state effectively using React's useState or useReducer, keeping state immutable.\n3. Implement stable callback handlers to prevent unnecessary child re-renders.\n4. Handle edge cases such as empty inputs or accidental deletions gracefully.",
+            "difficulty": 2,
+            "id": "q1"
+          },
+          {
+            "requirement_ids": [
+              "r2"
+            ],
+            "category": "technical",
+            "prompt": "Design and implement a JavaScript SDK feature that requires rate-limiting frequent function calls (throttling) and handling network failures with a robust retry strategy (including exponential backoff).",
+            "answer_outline": "A strong candidate should:\n1. Write a custom throttle function utilizing timestamps or setTimeout to control execution frequency.\n2. Implement a retry wrapper using promises or async/await that catches specific errors.\n3. Incorporate exponential backoff and jitter to prevent thundering herd problems on servers.\n4. Explain edge cases like cleaning up timers and handling maximum retry limits.",
+            "difficulty": 3,
+            "id": "q2"
+          },
+          {
+            "requirement_ids": [
+              "r1"
+            ],
+            "category": "technical",
+            "prompt": "Explain how React's reconciliation algorithm (Fiber) works, and discuss how you optimize performance to prevent unnecessary re-renders in a large-scale React application.",
+            "answer_outline": "A strong candidate should:\n1. Describe the Virtual DOM and how Fiber enables asynchronous rendering and priority-based updates.\n2. Discuss hooks like useMemo and useCallback and explain when they are actually useful versus when they add overhead.\n3. Mention component tree flattening, proper state colocation, and profiling tools to detect performance bottlenecks.",
+            "difficulty": 3,
+            "id": "q3"
+          },
+          {
+            "requirement_ids": [
+              "r3",
+              "r4"
+            ],
+            "category": "technical",
+            "prompt": "How do you ensure semantic HTML structure and high accessibility (a11y) standards in modern web applications while styling complex layouts using modern CSS features like Grid and Flexbox?",
+            "answer_outline": "A strong candidate should:\n1. Emphasize the use of proper semantic landmarks (<header>, <main>, <nav>, <article>) and ARIA attributes where native elements fall short.\n2. Explain how to manage keyboard navigation and focus trapping for modals.\n3. Discuss CSS architecture, layout choices between Grid (for 2D layouts) and Flexbox (for 1D layouts), and maintaining responsive designs across viewports.",
+            "difficulty": 2,
+            "id": "q4"
+          }
+        ],
+        "flashcards": [
+          {
+            "front": "How should you structure components and manage state in a React To-Do application?",
+            "back": "Structure into modular components (TodoList, TodoItem, TodoInput). Manage state efficiently using useState or useReducer with immutable updates, and use stable callbacks to prevent unnecessary re-renders.",
+            "requirement_ids": [
+              "r1",
+              "r2"
+            ],
+            "id": "f1"
+          },
+          {
+            "front": "How do you implement throttling and an exponential backoff retry strategy in JavaScript?",
+            "back": "Write a custom throttle function using timestamps or setTimeout. Implement an async retry wrapper with exponential backoff and jitter to handle network failures and prevent server overload.",
+            "requirement_ids": [
+              "r2"
+            ],
+            "id": "f2"
+          },
+          {
+            "front": "How does React's Fiber reconciliation algorithm work and how do you prevent unnecessary re-renders?",
+            "back": "Fiber enables asynchronous rendering and priority-based updates via the Virtual DOM. Optimize performance using useMemo, useCallback, proper state colocation, and profiling tools.",
+            "requirement_ids": [
+              "r1"
+            ],
+            "id": "f3"
+          },
+          {
+            "front": "How do you ensure web accessibility (a11y) and semantic HTML while using CSS Grid and Flexbox?",
+            "back": "Use semantic landmarks (<header>, <main>, <nav>), ARIA attributes, and ensure keyboard navigation/focus trapping. Use Flexbox for 1D layouts and Grid for 2D layouts to ensure responsive design.",
+            "requirement_ids": [
+              "r3",
+              "r4"
+            ],
+            "id": "f4"
+          }
+        ],
+        "schedule": {
+          "days_available": 3,
+          "days": [
+            {
+              "day": 1,
+              "focus": "Technical",
+              "question_ids": [
+                "q2",
+                "q3"
+              ],
+              "minutes": 120
+            },
+            {
+              "day": 2,
+              "focus": "Coding",
+              "question_ids": [
+                "q1"
+              ],
+              "minutes": 45
+            },
+            {
+              "day": 3,
+              "focus": "Technical",
+              "question_ids": [
+                "q4"
+              ],
+              "minutes": 45
+            }
+          ]
+        },
+        "coverage": {
+          "uncovered_requirement_ids": [],
+          "passes": 1
+        }
+      },
+      "error": null
     },
     {
       "id": "case-03",
-      "status": "failed",
-      "kit": null,
-      "error": {
-        "code": "LLM_RATE_LIMITED",
-        "message": "LLM_RATE_LIMITED: Gemini API daily quota has been exhausted. Please wait for the quota to reset or use a Gemini API project/model with available quota."
-      }
+      "status": "ok",
+      "kit": {
+        "source": {
+          "company": "Ibm",
+          "company_url": "https://www.ibm.com",
+          "role": "Backend Developer",
+          "location": "Not specified",
+          "jd_chars": 212,
+          "researched_at": "2026-09-09T19:28:37.738Z",
+          "pages_used": [
+            "https://www.ibm.com/in-en",
+            "https://www.ibm.com/in-en/careers?lnk=hpii1in",
+            "https://www.ibm.com/in-en/about?lnk=hpii1in"
+          ]
+        },
+        "company_brief": {
+          "summary": "IBM traces its roots back to 1896 and was founded as the Computing-Tabulating-Recording Company in 1911, later renamed IBM in 1924. Operating with over 300,000 employees across more than 170 countries, the company focuses on technological innovation spanning AI, hybrid cloud, automation, data solutions, infrastructure, and quantum computing.",
+          "what_they_do": "IBM provides enterprise technology solutions, software, infrastructure, consulting, and strategic partnerships to help businesses modernize, predict, automate, and secure their operations. Its offerings include AI and hybrid cloud solutions, data protection tools like IBM Guardium, AI agents via watsonx Orchestrate, storage systems like FlashSystem, asset management via Maximo, and planning analytics. Additionally, the company is engaged in research, educational initiatives like IBM SkillsBuild, and sustainability efforts aiming for net-zero greenhouse gas emissions by 2030.",
+          "sources": [
+            "https://www.ibm.com/in-en",
+            "https://www.ibm.com/in-en/careers?lnk=hpii1in",
+            "https://www.ibm.com/in-en/about?lnk=hpii1in"
+          ]
+        },
+        "role": {
+          "title": "Backend Developer",
+          "seniority": "Unspecified",
+          "responsibilities": [
+            "Designing backend services",
+            "Implementing authentication",
+            "Writing maintainable production code"
+          ],
+          "requirements": [
+            {
+              "id": "r1",
+              "text": "Experience in Python",
+              "kind": "technical",
+              "priority": "must"
+            },
+            {
+              "id": "r2",
+              "text": "Experience with FastAPI",
+              "kind": "technical",
+              "priority": "must"
+            },
+            {
+              "id": "r3",
+              "text": "Experience with REST APIs",
+              "kind": "technical",
+              "priority": "must"
+            },
+            {
+              "id": "r4",
+              "text": "Experience with PostgreSQL",
+              "kind": "technical",
+              "priority": "must"
+            }
+          ]
+        },
+        "questions": [
+          {
+            "requirement_ids": [
+              "r1",
+              "r2"
+            ],
+            "category": "technical",
+            "prompt": "Explain how Python's asynchronous programming model (asyncio) works under the hood, and how FastAPI leverages it to handle concurrent requests efficiently.",
+            "answer_outline": "Candidates should discuss the event loop, coroutines, async/await syntax, and non-blocking I/O operations. For FastAPI, they should explain how Starlette and Pydantic work together on top of ASGI (Asynchronous Server Gateway Interface) to handle high-throughput concurrent requests without blocking the main thread.",
+            "difficulty": 2,
+            "id": "q1"
+          },
+          {
+            "requirement_ids": [
+              "r2",
+              "r3"
+            ],
+            "category": "technical",
+            "prompt": "How do you handle dependency injection and request validation in FastAPI when designing scalable REST APIs?",
+            "answer_outline": "A strong answer will detail the use of FastAPI's `Depends` system for managing cross-cutting concerns like database sessions, authentication, and configuration. They should also explain how Pydantic models are used for automatic request body, query parameter, and response validation, ensuring clean separation of concerns and robust API contracts.",
+            "difficulty": 2,
+            "id": "q2"
+          },
+          {
+            "requirement_ids": [
+              "r3"
+            ],
+            "category": "system_design",
+            "prompt": "Design a versioning strategy for a public-facing REST API that expects high traffic and frequent breaking changes over time.",
+            "answer_outline": "The candidate should compare different versioning approaches (URI path versioning like `/v1/`, query parameters, and custom request headers like `Accept: application/vnd.company.v2+json`). They should discuss the pros and cons of each regarding caching, client SDK complexity, and maintenance overhead, favoring URI path versioning for clarity or header versioning for strict RESTful compliance.",
+            "difficulty": 3,
+            "id": "q3"
+          },
+          {
+            "requirement_ids": [
+              "r1",
+              "r4"
+            ],
+            "category": "technical",
+            "prompt": "How do you manage database migrations in Python using tools like Alembic, and how do you handle zero-downtime schema updates in PostgreSQL?",
+            "answer_outline": "The candidate should describe setting up Alembic with SQLAlchemy, writing reversible migration scripts, and best practices for zero-downtime updates in PostgreSQL. Key practices include splitting breaking changes into multiple steps (e.g., adding a nullable column, backfilling data, deploying application code to write to both, and then enforcing constraints/dropping old columns).",
+            "difficulty": 3,
+            "id": "q4"
+          },
+          {
+            "requirement_ids": [
+              "r4"
+            ],
+            "category": "technical",
+            "prompt": "What strategies do you use to diagnose and optimize a slow-running SQL query in PostgreSQL?",
+            "answer_outline": "Candidates should mention using `EXPLAIN ANALYZE` to inspect query execution plans, identifying sequential scans on large tables, adding appropriate B-tree or specialized indexes, analyzing table statistics with `ANALYZE`, and optimizing joins or subqueries to reduce I/O and CPU overhead.",
+            "difficulty": 2,
+            "id": "q5"
+          }
+        ],
+        "flashcards": [
+          {
+            "front": "How does Python's asyncio work under the hood and how does FastAPI leverage it?",
+            "back": "Python uses an event loop, coroutines, async/await, and non-blocking I/O. FastAPI builds on ASGI using Starlette and Pydantic to handle high-throughput concurrent requests without blocking the main thread.",
+            "requirement_ids": [
+              "r1",
+              "r2"
+            ],
+            "id": "f1"
+          },
+          {
+            "front": "How do you handle dependency injection and request validation in FastAPI?",
+            "back": "Use FastAPI's Depends system for cross-cutting concerns like database sessions and authentication. Use Pydantic models for automatic request body, query parameter, and response validation to ensure robust API contracts.",
+            "requirement_ids": [
+              "r2",
+              "r3"
+            ],
+            "id": "f2"
+          },
+          {
+            "front": "What are the common strategies for versioning a high-traffic public REST API with breaking changes?",
+            "back": "Options include URI path versioning (/v1/), query parameters, and custom request headers (Accept: application/vnd.company.v2+json). URI path versioning is favored for clarity, while headers offer strict REST compliance.",
+            "requirement_ids": [
+              "r3"
+            ],
+            "id": "f3"
+          },
+          {
+            "front": "How do you manage database migrations with Alembic and achieve zero-downtime updates in PostgreSQL?",
+            "back": "Use Alembic with SQLAlchemy for reversible scripts. For zero-downtime, split breaking changes into steps: add a nullable column, backfill data, deploy code to write to both, and finally enforce constraints or drop old columns.",
+            "requirement_ids": [
+              "r1",
+              "r4"
+            ],
+            "id": "f4"
+          },
+          {
+            "front": "What strategies are used to diagnose and optimize slow SQL queries in PostgreSQL?",
+            "back": "Use EXPLAIN ANALYZE to inspect execution plans, identify sequential scans on large tables, add B-tree or specialized indexes, run ANALYZE to update statistics, and optimize joins or subqueries.",
+            "requirement_ids": [
+              "r4"
+            ],
+            "id": "f5"
+          }
+        ],
+        "schedule": {
+          "days_available": 7,
+          "days": [
+            {
+              "day": 1,
+              "focus": "System Design",
+              "question_ids": [
+                "q3"
+              ],
+              "minutes": 60
+            },
+            {
+              "day": 2,
+              "focus": "Technical",
+              "question_ids": [
+                "q4"
+              ],
+              "minutes": 60
+            },
+            {
+              "day": 3,
+              "focus": "Technical",
+              "question_ids": [
+                "q1"
+              ],
+              "minutes": 45
+            },
+            {
+              "day": 4,
+              "focus": "Technical",
+              "question_ids": [
+                "q2"
+              ],
+              "minutes": 45
+            },
+            {
+              "day": 5,
+              "focus": "Technical",
+              "question_ids": [
+                "q5"
+              ],
+              "minutes": 45
+            },
+            {
+              "day": 6,
+              "focus": "Review",
+              "question_ids": [
+                "q3",
+                "q4"
+              ],
+              "minutes": 60
+            },
+            {
+              "day": 7,
+              "focus": "Review",
+              "question_ids": [
+                "q1",
+                "q2"
+              ],
+              "minutes": 60
+            }
+          ]
+        },
+        "coverage": {
+          "uncovered_requirement_ids": [],
+          "passes": 1
+        }
+      },
+      "error": null
     },
     {
       "id": "case-04",
-      "status": "failed",
-      "kit": null,
-      "error": {
-        "code": "LLM_RATE_LIMITED",
-        "message": "LLM_RATE_LIMITED: Gemini API daily quota has been exhausted. Please wait for the quota to reset or use a Gemini API project/model with available quota."
-      }
+      "status": "ok",
+      "kit": {
+        "source": {
+          "company": "Example",
+          "company_url": "https://example.invalid",
+          "role": "Software Engineer",
+          "location": "Not specified",
+          "jd_chars": 189,
+          "researched_at": "2026-09-09T19:28:53.137Z",
+          "pages_used": []
+        },
+        "company_brief": {
+          "summary": "No accessible company research was available for Example.",
+          "what_they_do": "No accessible company research was available to determine what the company does.",
+          "sources": []
+        },
+        "role": {
+          "title": "Software Engineer",
+          "seniority": "Unspecified",
+          "responsibilities": [
+            "Solve programming problems",
+            "Write clean code",
+            "Work effectively with a software development team"
+          ],
+          "requirements": [
+            {
+              "id": "r1",
+              "text": "Understand data structures and algorithms",
+              "kind": "technical",
+              "priority": "must"
+            },
+            {
+              "id": "r2",
+              "text": "Work effectively with a software development team",
+              "kind": "behavioral",
+              "priority": "must"
+            }
+          ]
+        },
+        "questions": [
+          {
+            "requirement_ids": [
+              "r1"
+            ],
+            "category": "technical",
+            "prompt": "Explain how you would choose between a hash map and a balanced binary search tree for a given dataset, and discuss the time complexity implications of each for lookups and range queries.",
+            "answer_outline": "A strong candidate should explain that hash maps provide O(1) average time complexity for lookups, insertions, and deletions, but do not maintain order and struggle with range queries. Balanced binary search trees (like AVL or Red-Black trees) provide O(log n) time complexity for these operations while keeping elements sorted, making them ideal for range-based queries. They should discuss collision resolution in hash maps and rebalancing mechanics in trees.",
+            "difficulty": 2,
+            "id": "q1"
+          },
+          {
+            "requirement_ids": [
+              "r1"
+            ],
+            "category": "coding",
+            "prompt": "Given an array of integers and a target sum, write a function to find all unique triplets in the array which gives the sum of zero or the specified target. Discuss how you handle edge cases and optimize the time complexity.",
+            "answer_outline": "The candidate should sort the array first to make it easier to avoid duplicates and use a two-pointer approach, reducing the time complexity from O(n^3) to O(n^2). Edge cases to address include arrays with fewer than three elements, arrays with all negative or positive numbers, and handling duplicate triplets in the output. A strong answer will walk through dry-running the code with an example.",
+            "difficulty": 2,
+            "id": "q2"
+          },
+          {
+            "requirement_ids": [
+              "r2"
+            ],
+            "category": "behavioral",
+            "prompt": "Describe a situation where you disagreed with a technical decision made by another member of your software development team. How did you resolve the disagreement while maintaining a positive working relationship?",
+            "answer_outline": "The candidate should use the STAR method (Situation, Task, Action, Result). They should highlight active listening, data-driven arguments, focusing on project goals rather than ego, and collaborating to find a compromise or consensus. The result should show how teamwork and mutual respect led to a successful outcome.",
+            "difficulty": 2,
+            "id": "q3"
+          },
+          {
+            "requirement_ids": [
+              "r2"
+            ],
+            "category": "behavioral",
+            "prompt": "Tell me about a time when a project you were working on faced a major roadblock or shifting requirements late in the development cycle. How did you coordinate with your team to adapt and deliver?",
+            "answer_outline": "A strong response will demonstrate flexibility, strong communication within an Agile environment, and collaborative problem-solving. The candidate should explain how they re-evaluated priorities, communicated risks to stakeholders, redistributed tasks with teammates, and maintained morale under pressure.",
+            "difficulty": 2,
+            "id": "q4"
+          }
+        ],
+        "flashcards": [
+          {
+            "front": "Hash Map vs. Balanced BST: Lookups & Range Queries",
+            "back": "Hash maps offer O(1) average time for lookups but poor range queries and no order. Balanced BSTs offer O(log n) time and maintain order, making them ideal for range queries.",
+            "requirement_ids": [
+              "r1"
+            ],
+            "id": "f1"
+          },
+          {
+            "front": "3Sum Problem: Optimization & Approach",
+            "back": "Sort the array and use a two-pointer approach to achieve O(n^2) time complexity instead of O(n^3). Handle edge cases like <3 elements, all same-sign numbers, and duplicate triplets.",
+            "requirement_ids": [
+              "r1"
+            ],
+            "id": "f2"
+          },
+          {
+            "front": "Resolving Technical Disagreements with Teammates",
+            "back": "Use the STAR method, active listening, and data-driven arguments focused on project goals. Collaborate to find consensus while maintaining a positive relationship.",
+            "requirement_ids": [
+              "r2"
+            ],
+            "id": "f3"
+          },
+          {
+            "front": "Handling Late Roadblocks or Shifting Requirements",
+            "back": "Demonstrate flexibility and Agile communication. Re-evaluate priorities, communicate risks to stakeholders, redistribute tasks, and maintain team morale.",
+            "requirement_ids": [
+              "r2"
+            ],
+            "id": "f4"
+          }
+        ],
+        "schedule": {
+          "days_available": 2,
+          "days": [
+            {
+              "day": 1,
+              "focus": "Technical",
+              "question_ids": [
+                "q1",
+                "q2"
+              ],
+              "minutes": 90
+            },
+            {
+              "day": 2,
+              "focus": "Behavioral",
+              "question_ids": [
+                "q3",
+                "q4"
+              ],
+              "minutes": 90
+            }
+          ]
+        },
+        "coverage": {
+          "uncovered_requirement_ids": [],
+          "passes": 1
+        }
+      },
+      "error": null
     },
     {
       "id": "case-05",
-      "status": "failed",
-      "kit": null,
-      "error": {
-        "code": "LLM_RATE_LIMITED",
-        "message": "LLM_RATE_LIMITED: Gemini API daily quota has been exhausted. Please wait for the quota to reset or use a Gemini API project/model with available quota."
-      }
+      "status": "ok",
+      "kit": {
+        "source": {
+          "company": "Github",
+          "company_url": "https://www.github.com",
+          "role": "Full Stack Engineer",
+          "location": "Not specified",
+          "jd_chars": 196,
+          "researched_at": "2026-09-09T19:29:11.855Z",
+          "pages_used": [
+            "https://github.com/"
+          ]
+        },
+        "company_brief": {
+          "summary": "GitHub is a widely adopted developer platform that brings developers, agents, and code together on one platform to build and ship software.",
+          "what_they_do": "GitHub provides a software development platform featuring AI tools and automation—including GitHub Copilot for AI code creation, GitHub Actions for CI/CD workflow automation, GitHub Codespaces for cloud-based development environments, and built-in application security features like GitHub Advanced Security and secret protection—to help individuals, startups, and enterprises plan, write, test, secure, and manage code.",
+          "sources": [
+            "https://github.com/"
+          ]
+        },
+        "role": {
+          "title": "Full Stack Engineer",
+          "seniority": "Mid-Level",
+          "responsibilities": [
+            "Work with TypeScript, React, Node.js and SQL databases"
+          ],
+          "requirements": [
+            {
+              "id": "r1",
+              "text": "TypeScript",
+              "kind": "technical",
+              "priority": "must"
+            },
+            {
+              "id": "r2",
+              "text": "React",
+              "kind": "technical",
+              "priority": "must"
+            },
+            {
+              "id": "r3",
+              "text": "Node.js",
+              "kind": "technical",
+              "priority": "must"
+            },
+            {
+              "id": "r4",
+              "text": "SQL databases",
+              "kind": "technical",
+              "priority": "must"
+            },
+            {
+              "id": "r5",
+              "text": "Git",
+              "kind": "technical",
+              "priority": "nice"
+            },
+            {
+              "id": "r6",
+              "text": "API development",
+              "kind": "technical",
+              "priority": "nice"
+            },
+            {
+              "id": "r7",
+              "text": "debugging",
+              "kind": "technical",
+              "priority": "nice"
+            },
+            {
+              "id": "r8",
+              "text": "system design",
+              "kind": "technical",
+              "priority": "nice"
+            }
+          ]
+        },
+        "questions": [
+          {
+            "requirement_ids": [
+              "r1",
+              "r2"
+            ],
+            "category": "coding",
+            "prompt": "Implement a custom React hook in TypeScript called useDebouncedSearch that takes a generic search function, a delay in milliseconds, and returns the debounced value, loading state, and error handling for asynchronous API calls.",
+            "answer_outline": "A strong candidate should use TypeScript generics to type the input and output parameters accurately, utilize useRef and useEffect for managing timers and cleanup on unmount, handle race conditions by ignoring outdated promise resolutions, and correctly type React state for data, loading, and error states.",
+            "difficulty": 2,
+            "id": "q1"
+          },
+          {
+            "requirement_ids": [
+              "r3",
+              "r6"
+            ],
+            "category": "technical",
+            "prompt": "Design and implement a robust REST API endpoint in Node.js using Express that processes webhook event payloads. Explain how you would ensure idempotency, handle payload verification (such as cryptographic signatures), and manage asynchronous queue processing for heavy jobs.",
+            "answer_outline": "The candidate should discuss using a database unique constraint or Redis lock based on a unique webhook event ID to ensure idempotency. They should explain validating HMAC SHA-256 signatures headers against a shared secret, returning quick 2xx responses, and offloading heavy tasks to a message broker or task queue like BullMQ.",
+            "difficulty": 2,
+            "id": "q2"
+          },
+          {
+            "requirement_ids": [
+              "r4"
+            ],
+            "category": "technical",
+            "prompt": "Given a SQL schema where test runs can be executed multiple times and have statuses such as pass, fail, or in-progress, write an optimized SQL query to aggregate and summarize these results for a pie chart, ensuring you handle edge cases like missing statuses.",
+            "answer_outline": "The candidate should write a query using GROUP BY on the status column along with aggregate functions like COUNT(*). They should demonstrate how to use a LEFT JOIN against a derived lookup table of all possible statuses (pass, fail, in-progress) to ensure zero-count statuses are still returned in the summary report.",
+            "difficulty": 2,
+            "id": "q3"
+          },
+          {
+            "requirement_ids": [
+              "r8"
+            ],
+            "category": "system_design",
+            "prompt": "Design a scalable web crawler system capable of discovering and indexing millions of URLs daily, including envelope calculations for network bandwidth, storage requirements, and politeness policies.",
+            "answer_outline": "The candidate should cover URL frontier design using priority queues (e.g., Redis or Kafka), DNS resolution caching, robots.txt parsing, duplicate URL detection using Bloom filters, and back-of-the-envelope calculations for storage (average page size * daily pages) and network bandwidth.",
+            "difficulty": 3,
+            "id": "q4"
+          },
+          {
+            "requirement_ids": [
+              "r1",
+              "r7"
+            ],
+            "category": "coding",
+            "prompt": "Write a TypeScript function that takes a list of dictionary words and implements a prefix tree (Trie) to efficiently support autocomplete suggestions, including handling recursive traversal for search matching.",
+            "answer_outline": "The candidate should define clear TypeScript interfaces/classes for TrieNode and Trie. They should implement insert and search/autocomplete methods cleanly, demonstrating correct handling of null pointers, character code conversions, and recursive collection of descendant words matching a prefix.",
+            "difficulty": 2,
+            "id": "q5"
+          },
+          {
+            "requirement_ids": [
+              "r5"
+            ],
+            "category": "technical",
+            "prompt": "Describe your Git branching and release strategy when working on a collaborative team. How do you handle merge conflicts, rebasing versus merging, and maintaining clean commit histories in a continuous integration environment?",
+            "answer_outline": "The candidate should discuss feature branching workflows (e.g., GitHub Flow), using pull requests with required status checks, rebasing local feature branches to maintain linear history before merging, resolving complex merge conflicts safely, and utilizing descriptive commit messages.",
+            "difficulty": 1,
+            "id": "q6"
+          }
+        ],
+        "flashcards": [
+          {
+            "front": "How do you implement a generic useDebouncedSearch hook in TypeScript with loading and error states?",
+            "back": "Use TypeScript generics for types, manage timers with useRef and useEffect (with cleanup), prevent race conditions by ignoring outdated promises, and type the data, loading, and error states.",
+            "requirement_ids": [
+              "r1",
+              "r2"
+            ],
+            "id": "f1"
+          },
+          {
+            "front": "How do you ensure idempotency and security when processing webhooks in an Express Node.js API?",
+            "back": "Ensure idempotency via database constraints or Redis locks using the event ID. Verify cryptographic signatures (e.g., HMAC SHA-256), return quick 2xx responses, and offload heavy tasks to a queue like BullMQ.",
+            "requirement_ids": [
+              "r3",
+              "r6"
+            ],
+            "id": "f2"
+          },
+          {
+            "front": "How do you write an optimized SQL query to aggregate test run statuses while handling missing/zero-count statuses?",
+            "back": "Use GROUP BY on the status column with COUNT(*), and LEFT JOIN against a derived lookup table of all possible statuses (pass, fail, in-progress) to ensure zero-count statuses are returned.",
+            "requirement_ids": [
+              "r4"
+            ],
+            "id": "f3"
+          },
+          {
+            "front": "What are the core components of designing a scalable web crawler system for millions of URLs?",
+            "back": "A URL frontier with priority queues (Redis/Kafka), DNS caching, robots.txt parsing, Bloom filters for duplicate detection, and back-of-the-envelope calculations for storage and network bandwidth.",
+            "requirement_ids": [
+              "r8"
+            ],
+            "id": "f4"
+          },
+          {
+            "front": "How do you implement an autocomplete Trie in TypeScript with recursive prefix traversal?",
+            "back": "Define TypeScript classes/interfaces for TrieNode and Trie, implement insert and autocomplete methods, handle null pointers, and recursively collect descendant words matching the prefix.",
+            "requirement_ids": [
+              "r1",
+              "r7"
+            ],
+            "id": "f5"
+          },
+          {
+            "front": "What is a recommended Git branching and release strategy for maintaining clean commit histories in CI?",
+            "back": "Use feature branching (GitHub Flow), PRs with status checks, rebasing local branches for linear history before merging, careful merge conflict resolution, and descriptive commit messages.",
+            "requirement_ids": [
+              "r5"
+            ],
+            "id": "f6"
+          }
+        ],
+        "schedule": {
+          "days_available": 1,
+          "days": [
+            {
+              "day": 1,
+              "focus": "Technical",
+              "question_ids": [
+                "q1",
+                "q2",
+                "q3",
+                "q5",
+                "q4",
+                "q6"
+              ],
+              "minutes": 270
+            }
+          ]
+        },
+        "coverage": {
+          "uncovered_requirement_ids": [],
+          "passes": 1
+        }
+      },
+      "error": null
     }
   ]
 }
