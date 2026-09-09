@@ -2,6 +2,10 @@ import { Response } from "express";
 import InterviewKit from "../models/InterviewKit.js";
 import { AuthRequest } from "../middleware/authMiddleware.js";
 import { generateInterviewKit } from "../services/pipeline/generateInterviewKit.js";
+import {
+  regenerateInterviewKit,
+  type RegenerateSection,
+} from "../services/pipeline/regenerateInterviewKit.js";
 
 export const createKit = async (
   req: AuthRequest,
@@ -151,9 +155,7 @@ export const getKitById = async (
       return;
     }
 
-    const id = Array.isArray(req.params.id)
-      ? req.params.id[0]
-      : req.params.id;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
     const kit = await InterviewKit.findOne({
       _id: id,
@@ -195,9 +197,7 @@ export const updateKit = async (
       return;
     }
 
-    const id = Array.isArray(req.params.id)
-      ? req.params.id[0]
-      : req.params.id;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
     const kit = await InterviewKit.findOne({
       _id: id,
@@ -212,14 +212,8 @@ export const updateKit = async (
       return;
     }
 
-    const {
-      company_brief,
-      role,
-      questions,
-      flashcards,
-      schedule,
-      coverage,
-    } = req.body;
+    const { company_brief, role, questions, flashcards, schedule, coverage } =
+      req.body;
 
     if (company_brief !== undefined) {
       kit.company_brief = company_brief;
@@ -317,9 +311,7 @@ export const startKitGeneration = async (
       return;
     }
 
-    const id = Array.isArray(req.params.id)
-      ? req.params.id[0]
-      : req.params.id;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
     const kit = await InterviewKit.findOne({
       _id: id,
@@ -375,6 +367,117 @@ export const startKitGeneration = async (
     res.status(500).json({
       success: false,
       message: "Failed to start interview kit generation",
+    });
+  }
+};
+export const regenerateKitSection = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
+  try {
+    if (!req.userId) {
+      res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+      return;
+    }
+
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+    const { section, category } = req.body;
+
+    const validSections: RegenerateSection[] = [
+      "company_brief",
+      "questions",
+      "flashcards",
+      "schedule",
+    ];
+
+    if (!section || !validSections.includes(section)) {
+      res.status(400).json({
+        success: false,
+        message:
+          "Invalid section. Allowed sections: company_brief, questions, flashcards, schedule",
+      });
+      return;
+    }
+
+    if (
+      section === "questions" &&
+      category !== undefined &&
+      typeof category !== "string"
+    ) {
+      res.status(400).json({
+        success: false,
+        message: "category must be a string",
+      });
+      return;
+    }
+
+    const kit = await InterviewKit.findOne({
+      _id: id,
+      user_id: req.userId,
+    });
+
+    if (!kit) {
+      res.status(404).json({
+        success: false,
+        message: "Interview kit not found",
+      });
+      return;
+    }
+
+    if (kit.generation.status === "generating") {
+      res.status(409).json({
+        success: false,
+        message: "Kit generation is already in progress",
+      });
+      return;
+    }
+
+    /*
+     * Mark generation as running before starting the
+     * regeneration pipeline.
+     */
+    kit.generation = {
+      status: "generating",
+      progress: 5,
+      current_step: `Regenerating ${section}`,
+      error: null,
+    };
+
+    await kit.save();
+
+    /*
+     * Return immediately.
+     *
+     * Frontend can poll GET /kits/:id while regeneration
+     * is running.
+     */
+    res.status(202).json({
+      success: true,
+      message: `Kit ${section} regeneration started`,
+      kit,
+    });
+
+    /*
+     * Run regeneration in background.
+     */
+    regenerateInterviewKit({
+      kitId: id,
+      userId: req.userId,
+      section,
+      category: typeof category === "string" ? category : undefined,
+    }).catch((error) => {
+      console.error("Background kit regeneration failed:", error);
+    });
+  } catch (error) {
+    console.error("Regenerate kit section error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to start kit regeneration",
     });
   }
 };

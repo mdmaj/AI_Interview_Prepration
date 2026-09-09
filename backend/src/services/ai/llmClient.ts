@@ -3,6 +3,7 @@ import { GoogleGenAI } from "@google/genai";
 const DEFAULT_MODEL = "gemini-3.7-flash";
 const DEFAULT_MAX_RETRIES = 2;
 const DEFAULT_INITIAL_DELAY_MS = 2000;
+const MAX_RETRY_DELAY_MS = 15000;
 
 const sleep = async (ms: number): Promise<void> => {
   await new Promise((resolve) => setTimeout(resolve, ms));
@@ -13,6 +14,7 @@ interface GeminiErrorDetails {
   message?: string;
   retryDelaySeconds?: number;
   isDailyQuotaExceeded?: boolean;
+  isRateLimited?: boolean;
 }
 
 const getErrorDetails = (error: unknown): GeminiErrorDetails => {
@@ -36,17 +38,24 @@ const getErrorDetails = (error: unknown): GeminiErrorDetails => {
         ? error.message
         : undefined;
 
-  const fullMessage = message?.toLowerCase() ?? "";
+  const fullMessage = JSON.stringify(error).toLowerCase();
 
   const isDailyQuotaExceeded =
     fullMessage.includes("generaterequestsperdayperprojectpermodel") ||
     fullMessage.includes("requests per day") ||
     fullMessage.includes("quota exhausted") ||
-    fullMessage.includes("daily quota");
+    fullMessage.includes("daily quota") ||
+    fullMessage.includes("perday");
 
-  const retryDelayMatch = message?.match(
-    /retryDelay["']?\s*:\s*["']?(\d+)s/i,
-  );
+  const isRateLimited =
+    fullMessage.includes("rate limit") ||
+    fullMessage.includes("ratelimit") ||
+    fullMessage.includes("too many requests") ||
+    status === 429;
+
+  const retryDelayMatch =
+    fullMessage.match(/retrydelay["']?\s*:\s*["']?(\d+(?:\.\d+)?)s/i) ??
+    message?.match(/retrydelay["']?\s*:\s*["']?(\d+(?:\.\d+)?)s/i);
 
   const retryDelaySeconds = retryDelayMatch
     ? Number(retryDelayMatch[1])
@@ -57,22 +66,44 @@ const getErrorDetails = (error: unknown): GeminiErrorDetails => {
     message,
     retryDelaySeconds,
     isDailyQuotaExceeded,
+    isRateLimited,
   };
 };
 
 const isRetryableError = (error: unknown): boolean => {
   const details = getErrorDetails(error);
 
+  // Daily quota exhaustion cannot be solved by retrying.
   if (details.isDailyQuotaExceeded) {
     return false;
   }
 
-  return (
-    details.status === 429 ||
+  // Rate limits are retryable.
+  if (details.isRateLimited) {
+    return true;
+  }
+
+  // Temporary server/provider failures are retryable.
+  if (
     details.status === 500 ||
     details.status === 502 ||
     details.status === 503 ||
     details.status === 504
+  ) {
+    return true;
+  }
+
+  const message = details.message?.toLowerCase() ?? "";
+
+  return (
+    message.includes("temporarily unavailable") ||
+    message.includes("service unavailable") ||
+    message.includes("internal server error") ||
+    message.includes("server error") ||
+    message.includes("unavailable") ||
+    message.includes("overloaded") ||
+    message.includes("timeout") ||
+    message.includes("timed out")
   );
 };
 
@@ -82,27 +113,35 @@ const formatGeminiError = (error: unknown): string => {
   if (details.isDailyQuotaExceeded) {
     return (
       "Gemini API daily quota has been exhausted. " +
-      "Please wait for the quota to reset or use a Gemini API project/model " +
-      "with available quota."
+      "Please wait for the quota to reset or use a Gemini API " +
+      "project/model with available quota."
     );
   }
 
-  if (details.status === 429) {
+  if (details.isRateLimited) {
     return (
-      "Gemini API rate limit reached. " +
-      "Please wait a moment and try again."
+      "Gemini API rate limit reached. " + "Please wait a moment and try again."
     );
   }
 
-  if (details.status === 503 || details.status === 500) {
+  if (
+    details.status === 500 ||
+    details.status === 502 ||
+    details.status === 503 ||
+    details.status === 504
+  ) {
     return (
       "Gemini API is temporarily unavailable. " +
       "Please try again in a moment."
     );
   }
 
-  if (error instanceof Error) {
+  if (error instanceof Error && error.message) {
     return error.message;
+  }
+
+  if (details.message) {
+    return details.message;
   }
 
   return "Failed to generate response from Gemini.";
@@ -118,8 +157,7 @@ export const generateText = async (
     throw new Error("GEMINI_API_KEY is not configured");
   }
 
-  const model =
-    process.env.GEMINI_MODEL?.trim() || DEFAULT_MODEL;
+  const model = process.env.GEMINI_MODEL?.trim() || DEFAULT_MODEL;
 
   const ai = new GoogleGenAI({
     apiKey,
@@ -129,6 +167,10 @@ export const generateText = async (
 
   for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
     try {
+      console.log(
+        `Gemini request attempt ${attempt}/${maxRetries + 1} using ${model}`,
+      );
+
       const response = await ai.models.generateContent({
         model,
         contents: prompt,
@@ -152,32 +194,45 @@ export const generateText = async (
         attempt,
         model,
         dailyQuotaExceeded: details.isDailyQuotaExceeded,
+        rateLimited: details.isRateLimited,
+        retryDelaySeconds: details.retryDelaySeconds,
       });
 
-      // Daily quota cannot be fixed by retrying.
+      // ---------------------------------------------------------
+      // 1. Daily quota exhausted
+      // ---------------------------------------------------------
+      // Retrying won't help, so stop immediately.
       if (details.isDailyQuotaExceeded) {
         break;
       }
 
-      // Non-transient errors should fail immediately.
+      // ---------------------------------------------------------
+      // 2. Non-retryable error
+      // ---------------------------------------------------------
       if (!isRetryableError(error)) {
         break;
       }
 
-      // No retry after the final attempt.
+      // ---------------------------------------------------------
+      // 3. Final attempt already failed
+      // ---------------------------------------------------------
       if (attempt > maxRetries) {
         break;
       }
 
-      const exponentialDelay =
-        DEFAULT_INITIAL_DELAY_MS * 2 ** (attempt - 1);
+      // ---------------------------------------------------------
+      // 4. Calculate retry delay
+      // ---------------------------------------------------------
+      const exponentialDelay = DEFAULT_INITIAL_DELAY_MS * 2 ** (attempt - 1);
 
-      const retryDelay =
+      const providerDelay =
         details.retryDelaySeconds !== undefined
           ? details.retryDelaySeconds * 1000
           : exponentialDelay;
 
-      // Small jitter prevents synchronized retries.
+      const retryDelay = Math.min(providerDelay, MAX_RETRY_DELAY_MS);
+
+      // Small jitter to avoid synchronized retries.
       const jitter = Math.floor(Math.random() * 500);
 
       const totalDelay = retryDelay + jitter;
@@ -193,8 +248,6 @@ export const generateText = async (
   }
 
   throw new Error(
-    `Failed to generate response from Gemini: ${formatGeminiError(
-      lastError,
-    )}`,
+    `Failed to generate response from Gemini: ${formatGeminiError(lastError)}`,
   );
 };
